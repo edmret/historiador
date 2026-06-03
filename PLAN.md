@@ -103,6 +103,23 @@ Histories are markdown with sections designed for scriptwriting:
 
 ---
 
+### Research Guardrails (Anti-Infinite Loop)
+
+Every research agent has hard limits that prevent unbounded crawling:
+
+| Limit | Default | Config Key | What it prevents |
+|-------|---------|------------|-----------------|
+| Max search queries per agent | 3 | `max_queries_per_agent` | Agent can't generate endless search terms |
+| Max pages scraped per query | 3 | `max_pages_per_query` | Agent doesn't crawl every link |
+| Max content length per page | 10,000 chars | `max_chars_per_page` | Agent doesn't read entire books |
+| Max total tokens per research phase | 8,000 | `max_research_tokens` | LLM synthesis has a budget |
+| Timeout per agent | 60 seconds | `research_timeout_seconds` | Whole agent run timed out at OS/HTTP level |
+| Max total pages per topic | 27 | `max_total_pages` | = queries × pages × agents (3×3×3) |
+
+**In code:** The research agent uses `asyncio.wait_for()` with the timeout, slices page content to `max_chars_per_page`, limits its search query generation to `max_queries_per_agent`, and the orchestrator cancels any agent that exceeds its budget. No infinite loops, no runaway costs.
+
+---
+
 ## File Structure
 
 ```
@@ -369,6 +386,13 @@ class Settings(BaseSettings):
     default_num_histories: int = 2
     default_num_research_agents: int = 3
 
+    # Research Guardrails
+    max_queries_per_agent: int = 3
+    max_pages_per_query: int = 3
+    max_chars_per_page: int = 10_000
+    max_research_tokens: int = 8_000
+    research_timeout_seconds: int = 60
+
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 
 settings = Settings()
@@ -564,7 +588,7 @@ class LLMClient:
 
 ### Task 9: Create Research Agent
 
-**Objective:** Agent that researches a topic from a specific angle
+**Objective:** Agent that researches a topic from a specific angle, bounded by hard limits
 
 **Files:**
 - Modify: `backend/agents/__init__.py`
@@ -572,19 +596,36 @@ class LLMClient:
 
 ```python
 class ResearchAgent:
-    """Researches a topic from a specific perspective."""
+    """Researches a topic from a specific perspective.
+    
+    BOUNDED by:
+    - max_queries_per_agent: stops generating search terms after N
+    - max_pages_per_query: only scrapes top N results per query
+    - max_chars_per_page: truncates page content to N chars
+    - research_timeout_seconds: asyncio.wait_for kills the whole agent
+    """
 
-    def __init__(self, perspective: str, llm: LLMClient):
-        self.perspective = perspective  # e.g., "Historical Context", "Key Figures"
+    def __init__(self, perspective: str, llm: LLMClient, settings: Settings):
+        self.perspective = perspective
         self.llm = llm
+        self.settings = settings
 
     async def research(self, topic: str) -> ResearchResult:
-        """1. Generate search queries from perspective
-           2. Search web for each query
-           3. Scrape top results
-           4. Use LLM to synthesize findings
+        """1. Generate search queries (capped by max_queries_per_agent)
+           2. Search web for each query (capped by max_pages_per_query)
+           3. Scrape top results (truncated by max_chars_per_page)
+           4. Use LLM to synthesize findings (capped by max_research_tokens)
+           
+           Entire method wrapped in asyncio.wait_for(timeout=research_timeout_seconds)
         """
 ```
+
+**Key implementation details:**
+- `asyncio.wait_for()` wraps the entire `research()` method with `research_timeout_seconds`
+- Search query generation prompt says "Generate at most {max_queries_per_agent} search queries"
+- Page content sliced to `content[:max_chars_per_page]`
+- Scraper fetches at most `max_pages_per_query` URLs per query
+- Any `asyncio.TimeoutError` is caught gracefully — the agent returns whatever it found so far
 
 ---
 
