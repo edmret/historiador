@@ -2,196 +2,114 @@
 
 > **For Hermes:** Implement this plan task-by-task using subagent-driven-development.
 
-**Goal:** Build a multi-agent application where a user submits a topic, multiple research agents crawl the web, a writer agent creates markdown histories, and a PWA with Kanban board handles approval/refinement workflow — output formatted for YouTube videos.
+**Goal:** Build a multi-agent PWA where a user submits a topic, a scoping agent clarifies it via interactive questions, research agents crawl the web, a writer agent creates markdown histories (with configurable tone profiles), and a Kanban board handles the full approval/refinement workflow — with subtopic todo management and feedback learning.
 
-**Architecture:** FastAPI backend with a custom async agent orchestration layer (no LangChain — simpler, more maintainable). SQLite for persistence. PWA frontend with service worker push notifications. All agents use the OpenAI-compatible API via the custom provider.
+**Architecture:** FastAPI backend + custom async agent orchestration (no LangChain). SQLite persistence. PWA frontend (no build step — vanilla JS, hash-routing). All agents use OpenAI-compatible API.
 
-**Tech Stack:** Python 3.13, FastAPI, SQLAlchemy + SQLite, aiohttp (web crawling), PWA (HTML/CSS/JS, Service Worker, Web Push), GitHub for delivery.
+**Tech Stack:** Python 3.13, FastAPI, SQLAlchemy + SQLite, aiohttp, PWA (HTML/CSS/JS, Service Worker, Web Push), GitHub.
+
+---
+
+## Complete User Flow (All in UI)
+
+```
+1. USER clicks "New Topic" → submits topic title + selects a Profile (or creates one)
+        │
+2. [Topic Scoping Agent] starts asking questions in the UI:
+        │  "Which aspect of the French Revolution interests you most?"
+        │  "What time range should we cover?"
+        │  "Do you want to focus on causes, events, or aftermath?"
+        │  (Interactive: user answers → agent asks follow-ups → continues until clear)
+        │
+3. After scoping, the agent proposes subtopics:
+        │  ├─ ▢ "Causes of the Revolution"        ← user checks which to research NOW
+        │  ├─ ☑ "Key Figures & The Reign of Terror"
+        │  ├─ ▢ "Napoleon's Rise"
+        │  └─ ▢ "Impact on Modern Europe"
+        │  (Unchecked → saved as TODO for later)
+        │
+4. USER selects subtopics to research, clicks "Start Research"
+        │
+5. [Research Agents] run in parallel (N configurable, each with guardrails)
+        │  Status: researching → progress shown in kanban
+        │
+6. [Compiler Agent] merges all research into comprehensive context
+        │  Status: compiling
+        │
+7. [Writer Agent] creates N histories using the selected Profile (tone/style)
+        │  Status: writing → histories_created
+        │  Push notification sent to user
+        │
+8. USER sees histories in Kanban "In Review" column
+        │  Clicks → reads markdown
+        │  ├── Approve ✅  → status: accepted (ready for YouTube)
+        │  ├── Reject ❌   → status: rejected (+ feedback stored)
+        │  └── Refine ⟳   → modal: "What should change?"
+        │                   → [Editor Agent] refines → back to In Review
+        │
+9. FEEDBACK LEARNING:
+        │  - Each history stores all feedback in its history
+        │  - The Profile used is updated: "user liked dramatic tone, rejected dry facts"
+        │  - Editor Agent is prompted with past similar feedback
+        │
+10. SUBTOPIC TODO:
+        │  - Unchecked subtopics remain in the topic's backlog
+        │  - User can revisit any time and start research on them
+        │  - Previous research on the parent topic is reused as context
+        │
+11. PROFILES:
+        │  - "Create Profile" button → Profile Agent asks questions:
+        │       "What name?", "What tone? (dramatic/educational/funny)",
+        │       "Target audience?", "Preferred length?", "Example style?"
+        │  - User answers → Profile saved with embeddings of preferences
+        │  - When refining a history, feedback also refines the profile
+        │  - User can edit profile questions to update preferences
+```
 
 ---
 
 ## Architecture Overview
 
 ```
-┌─────────────┐     ┌─────────────────────────────────────┐     ┌──────────┐
-│   User      │────▶│        FastAPI Backend               │────▶│  SQLite  │
-│  (PWA/API)  │◀────│                                     │◀────│   DB     │
-└─────────────┘     │  ┌───────────────────────────────┐  │     └──────────┘
-                    │  │   Agent Orchestrator            │  │
-                    │  │  ┌────────┐ ┌────────┐ ┌─────┐ │  │
-                    │  │  │Research│ │Research│ │ ... │ │  │
-                    │  │  │Agent 1 │ │Agent 2 │ │     │ │  │
-                    │  │  └────┬───┘ └────┬───┘ └──┬──┘ │  │
-                    │  │       │           │        │     │  │
-                    │  │       ▼           ▼        ▼     │  │
-                    │  │  ┌─────────────────────────┐     │  │
-                    │  │  │    Compiler Agent         │     │  │
-                    │  │  └───────────┬─────────────┘     │  │
-                    │  │              ▼                    │  │
-                    │  │  ┌─────────────────────────┐     │  │
-                    │  │  │    Writer Agent           │     │  │
-                    │  │  │  (creates N histories)   │     │  │
-                    │  │  └───────────┬─────────────┘     │  │
-                    │  │              ▼                    │  │
-                    │  │  ┌─────────────────────────┐     │  │
-                    │  │  │    Editor Agent           │     │  │
-                    │  │  │  (refines on feedback)   │     │  │
-                    │  │  └─────────────────────────┘     │  │
-                    │  └───────────────────────────────┘  │  │
-                    │                                      │  │
-                    │  ┌───────────────────────────────┐  │  │
-                    │  │   Web Push Notification        │  │  │
-                    │  └───────────────────────────────┘  │  │
-                    └─────────────────────────────────────┘  │
-                                      │                      │
-                                      ▼                      ▼
-                    ┌──────────────────────────────────────────┐
-                    │        PWA Frontend                       │
-                    │  - Kanban Board                           │
-                    │  - History Viewer & Editor                │
-                    │  - Service Worker + Push Notifications    │
-                    └──────────────────────────────────────────┘
-```
-
-### Agent Flow
-
-```
-User submits topic "The French Revolution"
-  │
-  ▼
-[Orchestrator] creates topic record (status: researching)
-  │
-  ├── [Research Agent 1] "Historical Context"  ──▶ Crawls web for background
-  ├── [Research Agent 2] "Key Figures"          ──▶ Crawls web for people/perspectives
-  ├── [Research Agent 3] "Impact & Legacy"      ──▶ Crawls web for consequences
-  │         (N agents, configurable)
-  │
-  ▼
-[Orchestrator] updates topic (status: compiled)
-  │
-  ▼
-[Compiler Agent] Deduplicates & merges all research → comprehensive context
-  │
-  ▼
-[Orchestrator] updates topic (status: writing)
-  │
-  ▼
-[Writer Agent] Creates N histories (default: 2) in markdown + push notification
-  │
-  ▼
-[Orchestrator] updates topic (status: histories_created)
-              histories status: in_review
-  │
-  ▼
-User sees on Kanban board → clicks on history to read
-  │
-  ├── Accept → status: accepted ✅  (ready for YouTube video)
-  ├── Reject → status: rejected ❌
-  ├── Refine → status: refining  ⟳  (Editor Agent runs with feedback)
-  │          └── Editor Agent refines → status: in_review again
-  └── Iterate → edit requests loop through Editor Agent
-```
-
-### YouTube Format
-
-Histories are markdown with sections designed for scriptwriting:
-- `## Title` — video title
-- `## Hook` — opening hook (first 15 seconds)
-- `## Narrative` — main body as sections
-- `## Key Visuals` — suggested visuals/B-roll descriptions
-- `## Call to Action` — ending
-
----
-
-### Research Guardrails (Anti-Infinite Loop)
-
-Every research agent has hard limits that prevent unbounded crawling:
-
-| Limit | Default | Config Key | What it prevents |
-|-------|---------|------------|-----------------|
-| Max search queries per agent | 3 | `max_queries_per_agent` | Agent can't generate endless search terms |
-| Max pages scraped per query | 3 | `max_pages_per_query` | Agent doesn't crawl every link |
-| Max content length per page | 10,000 chars | `max_chars_per_page` | Agent doesn't read entire books |
-| Max total tokens per research phase | 8,000 | `max_research_tokens` | LLM synthesis has a budget |
-| Timeout per agent | 60 seconds | `research_timeout_seconds` | Whole agent run timed out at OS/HTTP level |
-| Max total pages per topic | 27 | `max_total_pages` | = queries × pages × agents (3×3×3) |
-
-**In code:** The research agent uses `asyncio.wait_for()` with the timeout, slices page content to `max_chars_per_page`, limits its search query generation to `max_queries_per_agent`, and the orchestrator cancels any agent that exceeds its budget. No infinite loops, no runaway costs.
-
----
-
-## File Structure
-
-```
-historiador/
-├── pyproject.toml              # Python deps (uv)
-├── .env.example                # Config template
-├── README.md
-│
-├── backend/
-│   ├── __init__.py
-│   ├── main.py                 # FastAPI app entry, lifespan, CORS
-│   ├── config.py               # Settings from env vars
-│   ├── database.py             # SQLAlchemy engine, session factory
-│   │
-│   ├── models/
-│   │   ├── __init__.py
-│   │   ├── topic.py            # Topic model
-│   │   ├── history.py          # History model
-│   │   └── research_source.py  # ResearchSource model
-│   │
-│   ├── schemas/
-│   │   ├── __init__.py
-│   │   ├── topic.py            # Pydantic schemas for topics
-│   │   ├── history.py          # Pydantic schemas for histories
-│   │   └── kanban.py           # Pydantic schemas for kanban state
-│   │
-│   ├── routers/
-│   │   ├── __init__.py
-│   │   ├── topics.py           # /api/topics endpoints
-│   │   ├── histories.py        # /api/histories endpoints
-│   │   ├── kanban.py           # /api/kanban endpoints
-│   │   └── notifications.py    # /api/push-subscription endpoints
-│   │
-│   ├── agents/
-│   │   ├── __init__.py
-│   │   ├── orchestrator.py     # Main orchestrator: manages entire flow
-│   │   ├── research_agent.py   # Web crawling + research
-│   │   ├── compiler.py         # Merges & deduplicates research
-│   │   ├── writer.py           # Creates histories from compiled research
-│   │   ├── editor.py           # Refines histories from user feedback
-│   │   └── llm_client.py       # Shared OpenAI-compatible client
-│   │
-│   ├── crawler/
-│   │   ├── __init__.py
-│   │   ├── search.py           # Web search abstraction (Tavily/SerpAPI/fallback)
-│   │   └── scraper.py          # Web page content extraction
-│   │
-│   ├── notifications/
-│   │   ├── __init__.py
-│   │   └── push.py             # Web push notification sender
-│   │
-│   └── migrations/
-│       └── init_db.py          # Create tables
-│
-├── frontend/
-│   ├── index.html              # SPA entry point
-│   ├── manifest.json           # PWA manifest
-│   ├── service-worker.js       # Push notifications + offline cache
-│   ├── css/
-│   │   └── app.css             # Styles (kanban, cards, responsive)
-│   ├── js/
-│   │   ├── app.js              # Main app: routing, state
-│   │   ├── api.js              # API client
-│   │   ├── kanban.js           # Kanban board rendering
-│   │   ├── history-viewer.js   # Markdown rendering + approve/reject UI
-│   │   └── notifications.js    # Push subscription management
-│   └── assets/
-│       ├── icons/              # PWA icons
-│       └── logo.svg
-│
-└── scripts/
-    └── run.sh                  # Run backend + serve frontend
+┌──────────────────────────────────────────────────────────────────┐
+│                        PWA Frontend                              │
+│                                                                  │
+│  ┌────────────┐  ┌──────────────┐  ┌────────────┐  ┌─────────┐  │
+│  │ New Topic  │  │ Scoping Chat │  │  Kanban    │  │Profile  │  │
+│  │  (form)    │  │  (interactive│  │  Board     │  │Manager  │  │
+│  │            │  │   Q&A)       │  │            │  │         │  │
+│  └─────┬──────┘  └──────┬───────┘  └─────┬──────┘  └────┬────┘  │
+│        │               │                │              │       │
+│        └───────────────┴────────────────┴──────────────┘       │
+│                            │  REST API (fetch)                  │
+└────────────────────────────┼───────────────────────────────────┘
+                             │
+┌────────────────────────────┼───────────────────────────────────┐
+│                     FastAPI Backend                             │
+│                            │                                    │
+│  ┌─────────────────────────▼─────────────────────────────┐     │
+│  │                  Agent Orchestrator                    │     │
+│  │  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────┐  │     │
+│  │  │ Scoping  │  │ Research │  │ Writer   │  │Editor│  │     │
+│  │  │  Agent   │  │ Agents(N)│  │ Agent    │  │Agent │  │     │
+│  │  └──────────┘  └────┬─────┘  └────┬─────┘  └──┬───┘  │     │
+│  │                     │             │            │       │     │
+│  │  ┌──────────────────▼─────────────▼────────────▼───┐   │     │
+│  │  │              Compiler Agent                      │   │     │
+│  │  └──────────────────┬──────────────────────────────┘   │     │
+│  │                     │                                   │     │
+│  │  ┌──────────────────▼──────────────────────────────┐   │     │
+│  │  │         Profile Agent                           │   │     │
+│  │  │  (create/edit profiles, learn from feedback)    │   │     │
+│  │  └─────────────────────────────────────────────────┘   │     │
+│  └────────────────────────────────────────────────────────┘     │
+│                            │                                    │
+│  ┌─────────────────────────▼─────────────────────────────┐     │
+│  │                     SQLite DB                         │     │
+│  │  topics | subtopics | histories | profiles | feedback │     │
+│  │  push_subscriptions | research_sources                │     │
+│  └───────────────────────────────────────────────────────┘     │
+└────────────────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -201,25 +119,73 @@ historiador/
 ```sql
 -- Topics table
 CREATE TABLE topics (
-    id TEXT PRIMARY KEY,          -- UUID
-    title TEXT NOT NULL,          -- User's topic
-    status TEXT NOT NULL DEFAULT 'pending',
-        -- pending → researching → compiled → writing → histories_created
-    num_histories INTEGER NOT NULL DEFAULT 2,  -- How many histories to generate
-    num_research_agents INTEGER NOT NULL DEFAULT 3,
+    id TEXT PRIMARY KEY,
+    title TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'scoping',
+        -- scoping → scoping_complete → researching → compiling → writing → histories_created
+    profile_id TEXT REFERENCES profiles(id),
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Subtopics table
+CREATE TABLE subtopics (
+    id TEXT PRIMARY KEY,
+    topic_id TEXT NOT NULL REFERENCES topics(id),
+    title TEXT NOT NULL,
+    description TEXT,               -- What this subtopic covers
+    status TEXT NOT NULL DEFAULT 'todo',
+        -- todo → selected → researching → researched → done
+    todo_order INTEGER DEFAULT 0,   -- Order in the backlog
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Scoping conversation
+CREATE TABLE scoping_messages (
+    id TEXT PRIMARY KEY,
+    topic_id TEXT NOT NULL REFERENCES topics(id),
+    role TEXT NOT NULL,              -- 'agent' or 'user'
+    content TEXT NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Histories table
 CREATE TABLE histories (
-    id TEXT PRIMARY KEY,          -- UUID
+    id TEXT PRIMARY KEY,
     topic_id TEXT NOT NULL REFERENCES topics(id),
-    title TEXT NOT NULL,          -- History title
-    content TEXT NOT NULL,        -- Full markdown content
+    subtopic_id TEXT REFERENCES subtopics(id),
+    title TEXT NOT NULL,
+    content TEXT NOT NULL,           -- Full markdown
     status TEXT NOT NULL DEFAULT 'in_review',
         -- in_review → refining → accepted | rejected
-    feedback TEXT,                -- Last editor feedback (if refining)
+    profile_id TEXT REFERENCES profiles(id),
+    feedback_count INTEGER DEFAULT 0,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Feedback records (per history + per profile)
+CREATE TABLE feedback_records (
+    id TEXT PRIMARY KEY,
+    history_id TEXT REFERENCES histories(id),
+    profile_id TEXT REFERENCES profiles(id),
+    feedback_type TEXT NOT NULL,     -- 'accept' | 'reject' | 'refine_request'
+    feedback_text TEXT,              -- User's words (null for accept/reject)
+    applied BOOLEAN DEFAULT FALSE,   -- Was this feedback used to update the profile?
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Profiles table
+CREATE TABLE profiles (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL UNIQUE,
+    description TEXT,                -- Brief description
+    tone TEXT NOT NULL DEFAULT 'neutral',        -- dramatic, educational, humorous, epic, neutral
+    audience TEXT DEFAULT 'general',             -- target audience
+    preferred_length TEXT DEFAULT 'medium',      -- short, medium, long
+    style_notes TEXT,                -- Free-form style instructions
+    creation_feedback TEXT,          -- Answers from Profile Agent questions
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
@@ -227,8 +193,8 @@ CREATE TABLE histories (
 -- Research sources table
 CREATE TABLE research_sources (
     id TEXT PRIMARY KEY,
-    topic_id TEXT NOT NULL REFERENCES topics(id),
-    agent_name TEXT NOT NULL,     -- Which research agent found this
+    subtopic_id TEXT NOT NULL REFERENCES subtopics(id),
+    agent_name TEXT NOT NULL,
     url TEXT NOT NULL,
     title TEXT,
     content_snippet TEXT,
@@ -247,22 +213,325 @@ CREATE TABLE push_subscriptions (
 
 ---
 
+## Agent Descriptions
+
+### 1. Topic Scoping Agent
+**Purpose:** Narrows down a broad user topic through interactive Q&A
+- Receives topic + profile → generates first question
+- User answers via UI chat → agent asks follow-up (up to 5 rounds or until clear)
+- After scoping, proposes subtopics: "Based on your answers, these subtopics make sense..."
+- User checks which to research NOW, rest go to TODO backlog
+- Generates a scoping summary that all subsequent agents use as context
+
+### 2. Research Agents (N configurable)
+**Purpose:** Crawl the web for each selected subtopic
+- Each subtopic gets its own research agent
+- Bounded by guardrails (timeout, pages, chars, queries)
+- Returns sources + synthesized findings
+
+### 3. Compiler Agent
+**Purpose:** Merge all research outputs into structured context
+- Deduplicates across subtopics
+- Organizes by theme/timeline
+- Produces one comprehensive markdown document
+
+### 4. Writer Agent
+**Purpose:** Create N histories from compiled research using a Profile
+- Receives: compiled context + selected Profile (tone, style, audience)
+- Generates N histories in YouTube-ready markdown format
+- Each has: Hook → Narrative → Key Visuals → CTA
+- Uses Profile's tone and style guide
+
+### 5. Editor Agent
+**Purpose:** Refine a specific history based on user feedback
+- Receives: history content + user feedback + profile
+- Applies changes while respecting profile tone
+- Updates history's feedback_count
+- Also suggests profile improvements based on feedback patterns
+
+### 6. Profile Agent
+**Purpose:** Create and enhance writing profiles
+- **Creation:** Asks user questions (name, tone, audience, length, examples)
+- **Enhancement:** User can revisit and answer more questions anytime
+- **Feedback Learning:** When histories are accepted/rejected, the profile is updated:
+  - "User accepted 3 histories from this profile → reinforcing this tone"
+  - "User rejected histories with [pattern] → adjusting profile away from that"
+
+---
+
+## Research Guardrails
+
+| Limit | Default | Config |
+|-------|---------|--------|
+| Max search queries per agent | 3 | `max_queries_per_agent` |
+| Max pages scraped per query | 3 | `max_pages_per_query` |
+| Max chars per page | 10,000 | `max_chars_per_page` |
+| Max research tokens | 8,000 | `max_research_tokens` |
+| Timeout per agent | 60s | `research_timeout_seconds` |
+| Max scoping rounds | 5 | `max_scoping_rounds` |
+
+---
+
+## File Structure
+
+```
+historiador/
+├── pyproject.toml
+├── .env.example
+├── README.md
+│
+├── backend/
+│   ├── main.py                 # FastAPI app, lifespan, CORS, static files
+│   ├── config.py               # Settings from env vars
+│   ├── database.py             # SQLAlchemy engine + session
+│   │
+│   ├── models/
+│   │   ├── __init__.py
+│   │   ├── base.py             # DeclarativeBase
+│   │   ├── topic.py
+│   │   ├── subtopic.py
+│   │   ├── history.py
+│   │   ├── profile.py
+│   │   ├── feedback.py
+│   │   ├── scoping_message.py
+│   │   ├── research_source.py
+│   │   └── push_subscription.py
+│   │
+│   ├── schemas/
+│   │   ├── __init__.py
+│   │   ├── topic.py
+│   │   ├── subtopic.py
+│   │   ├── history.py
+│   │   ├── profile.py
+│   │   ├── scoping.py
+│   │   └── kanban.py
+│   │
+│   ├── routers/
+│   │   ├── __init__.py
+│   │   ├── topics.py           # POST /topics, GET /topics, GET /topics/:id
+│   │   ├── scoping.py          # POST /topics/:id/scoping/answer, GET /scoping/messages
+│   │   ├── subtopics.py        # PATCH /subtopics/:id/select, POST /subtopics/:id/research
+│   │   ├── histories.py        # GET /histories, PATCH /histories/:id, POST /histories/:id/refine
+│   │   ├── kanban.py           # GET /kanban
+│   │   ├── profiles.py         # CRUD /profiles, POST /profiles/:id/enhance
+│   │   └── notifications.py    # POST /push-subscribe, GET /push-public-key
+│   │
+│   ├── agents/
+│   │   ├── __init__.py
+│   │   ├── llm_client.py       # Shared OpenAI-compatible client
+│   │   ├── scoping_agent.py    # Interactive Q&A to delimit topic
+│   │   ├── research_agent.py   # Web crawling + search
+│   │   ├── compiler.py         # Merge + deduplicate research
+│   │   ├── writer.py           # Generate histories with profile
+│   │   ├── editor.py           # Refine histories + profile feedback
+│   │   ├── profile_agent.py    # Create+enhance profiles, learn from feedback
+│   │   └── orchestrator.py     # Manages full lifecycle
+│   │
+│   ├── crawler/
+│   │   ├── __init__.py
+│   │   ├── search.py           # Web search abstraction
+│   │   └── scraper.py          # Page content extraction
+│   │
+│   ├── notifications/
+│   │   ├── __init__.py
+│   │   └── push.py             # Web push sender
+│   │
+│   └── migrations/
+│       └── init_db.py
+│
+├── frontend/
+│   ├── index.html              # SPA entry point
+│   ├── manifest.json           # PWA manifest
+│   ├── service-worker.js       # Push + offline cache
+│   ├── css/
+│   │   └── app.css             # Dark theme, kanban, chat, responsive
+│   └── js/
+│       ├── app.js              # Router, state, page switching
+│       ├── api.js              # Fetch-based API client
+│       ├── kanban.js           # Kanban board with columns
+│       ├── topic-form.js       # New topic form + profile selector
+│       ├── scoping-chat.js     # Interactive Q&A chat UI
+│       ├── subtopic-selector.js # Checkbox list for subtopics
+│       ├── history-viewer.js   # Markdown render + approve/reject/refine
+│       ├── profile-manager.js  # CRUD profiles + enhance questions
+│       └── notifications.js    # Push subscription management
+│
+└── scripts/
+    └── run.sh
+```
+
+---
+
 ## API Endpoints
 
 | Method | Path | Description |
 |--------|------|-------------|
-| POST | `/api/topics` | Create topic → triggers agent flow |
-| GET | `/api/topics` | List all topics with status |
-| GET | `/api/topics/{id}` | Topic details + histories |
-| GET | `/api/kanban` | Kanban board state (grouped by status) |
-| GET | `/api/histories` | List histories (query param: status) |
-| GET | `/api/histories/{id}` | Get single history markdown |
-| PATCH | `/api/histories/{id}` | Update status (approve/reject) |
-| POST | `/api/histories/{id}/refine` | Send refinement feedback → Editor Agent |
+| **Topics** | | |
+| POST | `/api/topics` | Create topic with title + profile_id |
+| GET | `/api/topics` | List all topics with subtopic counts |
+| GET | `/api/topics/{id}` | Topic detail with subtopics, histories |
+| **Scoping** | | |
+| GET | `/api/topics/{id}/scoping/messages` | Get scoping conversation so far |
+| POST | `/api/topics/{id}/scoping/answer` | Submit user answer → agent responds |
+| POST | `/api/topics/{id}/scoping/complete` | Finalize scoping → propose subtopics |
+| **Subtopics** | | |
+| GET | `/api/topics/{id}/subtopics` | List subtopics (todo vs selected) |
+| PATCH | `/api/subtopics/{id}` | Toggle selected/todo status |
+| POST | `/api/topics/{id}/research` | Start research on ALL selected subtopics |
+| **Histories** | | |
+| GET | `/api/histories` | List with status filter |
+| GET | `/api/histories/{id}` | Full history markdown + metadata |
+| PATCH | `/api/histories/{id}` | Approve or reject (with optional feedback) |
+| POST | `/api/histories/{id}/refine` | Refine with feedback text → Editor Agent |
+| **Kanban** | | |
+| GET | `/api/kanban` | Board state grouped by status lane |
+| GET | `/api/kanban/topic/{id}` | Board state for one topic |
+| **Profiles** | | |
+| GET | `/api/profiles` | List all profiles |
+| POST | `/api/profiles` | Create profile (name only → Profile Agent asks questions) |
+| GET | `/api/profiles/{id}` | Profile detail |
+| PATCH | `/api/profiles/{id}` | Update profile fields |
+| POST | `/api/profiles/{id}/enhance` | Profile Agent asks enhancement questions |
+| GET | `/api/profiles/{id}/enhance/questions` | Get next enhancement question |
+| POST | `/api/profiles/{id}/enhance/answer` | Answer enhancement question → agent responds |
+| **Notifications** | | |
 | POST | `/api/push-subscribe` | Register push subscription |
 | GET | `/api/push-public-key` | Get VAPID public key |
+| **Health** | | |
 | GET | `/api/health` | Health check |
-| GET | `/api/topics/{id}/logs` | Get processing logs for a topic |
+
+---
+
+## UI Screens (Single Page App)
+
+### 1. Main Kanban Screen (default view)
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│  [➕ New Topic]   [📋 Manage Profiles]   [🔔 Notifications]         │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                     │
+│  ┌─────────────┐ ┌──────────┐ ┌────────┐ ┌─────────┐ ┌──────────┐  │
+│  │  Scoping    │ │Research  │ │Writing │ │In Review│ │Accepted   │  │
+│  │  (topic)    │ │(subtopic)│ │(topic) │ │(history)│ │(history)  │  │
+│  │             │ │          │ │        │ │         │ │           │  │
+│  │  "French    │ │Causes    │ │French  │ │"The     │ │"Bastille  │  │
+│  │  Rev."      │ │🔥        │ │Rev.    │ │Bastille"│ │Fall" ✅   │  │
+│  │             │ │Figures   │ │🔥      │ │"Reign   │ │           │  │
+│  │  (scoping)  │ │🔥        │ │        │ │of Terror│ │           │  │
+│  └─────────────┘ └──────────┘ └────────┘ └─────────┘ └──────────┘  │
+│                                   ┌──────────┐                      │
+│                                   │ Rejected │                      │
+│                                   │ (history)│                      │
+│                                   └──────────┘                      │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+### 2. New Topic Screen
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│  [ ← Back to Kanban ]                                               │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                     │
+│  Topic Title: [  ________________________________  ]                │
+│                                                                     │
+│  Profile:     [ 📖 Epic Storyteller  ▼  ]                           │
+│               [ 📚 Educational              ]                        │
+│               [ 🎭 Dramatic                 ]                        │
+│               [ ➕ Create New Profile...     ]                        │
+│                                                                     │
+│  [  Start Scoping  ]                                                │
+│                                                                     │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+### 3. Scoping Chat Screen
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│  [ ← Back ]   Scoping: "The French Revolution"                     │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                     │
+│  ┌──────────────────────────────────────────┐                       │
+│  │ Agent: Great topic! Which aspect          │                       │
+│  │ interests you most — the causes, the      │                       │
+│  │ key events, or the aftermath?             │                       │
+│  └──────────────────────────────────────────┘                       │
+│  ┌──────────────────────────────────────────┐                       │
+│  │ You: I'm most interested in the causes   │                       │
+│  │ and how ordinary people were affected.   │                       │
+│  └──────────────────────────────────────────┘                       │
+│  ┌──────────────────────────────────────────┐                       │
+│  │ Agent: Great! And what time range should  │                       │
+│  │ we focus on — the decade before 1789 or   │                       │
+│  │ the revolutionary period itself?          │                       │
+│  └──────────────────────────────────────────┘                       │
+│                                                                     │
+│  [_______________________________________________] [Send]          │
+│                                                   [Complete ✅]     │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+### 4. Subtopic Selection Screen
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│  [ ← Back ]   "The French Revolution" — Subtopics                   │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                     │
+│  Based on our conversation, here are the subtopics:                 │
+│                                                                     │
+│  ☑ Causes of the Revolution (1780-1789)           [Research Now]   │
+│  ☑ Life of Ordinary People During the Revolution                    │
+│  ▢ The Reign of Terror & Robespierre                                │
+│  ▢ Napoleon's Rise to Power                                         │
+│  ▢ Impact on European Monarchies                                    │
+│                                                                     │
+│  Check the ones to research NOW. Unchecked stay as TODO.            │
+│                                                                     │
+│  [  🚀 Start Research on 2 Selected Subtopics  ]                   │
+│                                                                     │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+### 5. History Viewer
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│  [ ← Kanban ]   History: "The Bread That Broke a Kingdom"          │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                     │
+│  Profile: 📖 Epic Storyteller         Status: In Review             │
+│  ───────────────────────────────────────────────────────────────    │
+│                                                                     │
+│  ## Title: The Bread That Broke a Kingdom                           │
+│                                                                     │
+│  ## Hook                                                           │
+│  In 1788, a French baker...                                        │
+│                                                                     │
+│  ## Narrative                                                      │
+│  ...                                                               │
+│                                                                     │
+│  ┌──────────┐  ┌──────────┐  ┌─────────────────────────────────┐  │
+│  │ ✅ Accept│  │ ❌ Reject│  │  ⟳  Refine: [                     ]│
+│  └──────────┘  └──────────┘  │  [________________________________]│
+│                               │  [Send Feedback ⟳]                │
+│                               └─────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+### 6. Profile Manager
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│  [ ← Back ]   Manage Profiles                                      │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                     │
+│  📖 Epic Storyteller    (3 histories, 100% acceptance rate)         │
+│     [Enhance ✨] [Edit] [Delete]                                    │
+│                                                                     │
+│  📚 Educational         (1 history, 0% acceptance)                  │
+│     [Enhance ✨] [Edit] [Delete]                                    │
+│                                                                     │
+│  [ ➕ Create New Profile ]                                          │
+│                                                                     │
+└─────────────────────────────────────────────────────────────────────┘
+```
 
 ---
 
@@ -270,617 +539,411 @@ CREATE TABLE push_subscriptions (
 
 ```
 BATCH 1 (parallel — independent files):
-  Task 1:  Create pyproject.toml + config
-  Task 2:  Create database models + schema
-  Task 3:  Create PWA manifest + service-worker.js
+  Task 1:  Create pyproject.toml + config.py + .env.example
+  Task 2:  Create all database models (7 model files)
+  Task 3:  Create PWA manifest.json + service-worker.js
 
 BATCH 2 (depends on Batch 1):
-  Task 4:  Create database.py + migrations (depends on Task 1, 2)
-  Task 5:  Create API schemas (depends on Task 2)
+  Task 4:  Create database.py + migrations
+  Task 5:  Create all Pydantic schemas (topic, subtopic, history, profile, scoping, kanban)
 
-BATCH 3 (depends on Batch 2):
-  Task 6:  Create LLM client (depends on Task 1)
-  Task 7:  Create crawler/search/scraper (depends on Task 1)
-  Task 8:  Create push notification module (depends on Task 1)
+BATCH 3 (depends on Batch 1):
+  Task 6:  Create LLM client
+  Task 7:  Create crawler/search/scraper
+  Task 8:  Create push notification module
 
 BATCH 4 (depends on Batch 3):
-  Task 9:  Create Research Agent (depends on Task 6, 7)
-  Task 10: Create Compiler Agent (depends on Task 6)
-  Task 11: Create Writer Agent (depends on Task 6)
+  Task 9:  Create Scoping Agent
+  Task 10: Create Research Agent (with guardrails)
+  Task 11: Create Profile Agent
 
 BATCH 5 (depends on Batch 4):
-  Task 12: Create Editor Agent (depends on Task 6)
-  Task 13: Create Orchestrator (depends on Task 9, 10, 11, 12)
+  Task 12: Create Compiler Agent
+  Task 13: Create Writer Agent (uses profiles)
+  Task 14: Create Editor Agent (with feedback learning)
 
-BATCH 6 (depends on Batch 2, 5):
-  Task 14: Create API routers - topics + histories (depends on Task 4, 5, 13)
-  Task 15: Create API routers - kanban + notifications (depends on Task 4, 5, 8)
+BATCH 6 (depends on Batch 5):
+  Task 15: Create Orchestrator (full pipeline orchestration)
 
-BATCH 7 (depends on Batch 6):
-  Task 16: Create FastAPI main.py (depends on Task 14, 15)
+BATCH 7 (depends on Batch 2, 6):
+  Task 16: Create routers — topics + scoping + subtopics
+  Task 17: Create routers — histories + kanban + profiles
+  Task 18: Create router — notifications
 
-BATCH 8 (parallel — independent files):
-  Task 17: Create frontend CSS
-  Task 18: Create frontend JS - API client + notifications
-  Task 19: Create frontend HTML structure
+BATCH 8 (depends on Batch 7):
+  Task 19: Create FastAPI main.py (wire everything)
 
-BATCH 9 (depends on Batch 8):
-  Task 20: Create kanban.js board rendering
-  Task 21: Create history-viewer.js
+BATCH 9 (parallel — frontend base):
+  Task 20: Create frontend CSS (dark theme, kanban columns, chat bubbles, responsive)
+  Task 21: Create api.js + notifications.js
+  Task 22: Create index.html + manifest service worker finalization
 
 BATCH 10 (depends on Batch 9):
-  Task 22: Wire up app.js (depends on 18, 20, 21)
+  Task 23: Create topic-form.js + scoping-chat.js
+  Task 24: Create subtopic-selector.js
+  Task 25: Create kanban.js
 
-BATCH 11:
-  Task 23: Create README.md + .env.example + run.sh
-  Task 24: End-to-end test
+BATCH 11 (depends on Batch 10):
+  Task 26: Create history-viewer.js
+  Task 27: Create profile-manager.js
+
+BATCH 12 (depends on Batch 11):
+  Task 28: Wire up app.js (router, state, page switching, auto-refresh)
+
+BATCH 13:
+  Task 29: Create README.md + run.sh
+  Task 30: End-to-end test
 ```
 
 ---
 
 ## Detailed Tasks
 
-### Task 1: Create pyproject.toml and config
+### Task 1: Create pyproject.toml, config.py, .env.example
 
-**Objective:** Set up Python project with uv, dependencies, and config module
+**Objective:** Set up Python project with uv, all dependencies, and typed settings
 
 **Files:**
-- Create: `pyproject.toml`
+- Create: `pyproject.toml` — same deps as before
 - Create: `backend/__init__.py`
 - Create: `backend/config.py`
 
-**pyproject.toml:**
-```toml
-[project]
-name = "historiador"
-version = "0.1.0"
-description = "Multi-agent history generation system"
-requires-python = ">=3.12"
-dependencies = [
-    "fastapi>=0.115.0",
-    "uvicorn[standard]>=0.32.0",
-    "sqlalchemy>=2.0.0",
-    "aiosqlite>=0.20.0",
-    "httpx>=0.28.0",
-    "aiohttp>=3.10.0",
-    "beautifulsoup4>=4.12.0",
-    "lxml>=5.3.0",
-    "pywebpush>=1.14.0",
-    "cryptography>=43.0.0",
-    "python-dotenv>=1.0.0",
-    "pydantic>=2.0.0",
-    "pydantic-settings>=2.0.0",
-]
-
-[tool.uv]
-dev-dependencies = [
-    "pytest>=8.0.0",
-    "pytest-asyncio>=0.24.0",
-]
-```
-
-**config.py:**
+**Config additions vs previous version:**
 ```python
-from pydantic_settings import BaseSettings
-from pathlib import Path
+# Agent config
+default_num_histories: int = 2
+default_num_research_agents: int = 3
+max_scoping_rounds: int = 5
 
-class Settings(BaseSettings):
-    # LLM
-    llm_api_key: str = ""
-    llm_base_url: str = "https://api.nan.builders/v1"
-    llm_model: str = "deepseek-v4-flash"
-
-    # Web Search
-    search_provider: str = "tavily"  # tavily, serpapi, or "duckduckgo"
-    tavily_api_key: str = ""
-    serpapi_api_key: str = ""
-
-    # Web Push (VAPID)
-    vapid_public_key: str = ""
-    vapid_private_key: str = ""
-    vapid_claim_email: str = "admin@historiador.app"
-
-    # App
-    database_url: str = "sqlite+aiosqlite:///./historiador.db"
-    cors_origins: str = "*"
-    default_num_histories: int = 2
-    default_num_research_agents: int = 3
-
-    # Research Guardrails
-    max_queries_per_agent: int = 3
-    max_pages_per_query: int = 3
-    max_chars_per_page: int = 10_000
-    max_research_tokens: int = 8_000
-    research_timeout_seconds: int = 60
-
-    model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
-
-settings = Settings()
+# Research Guardrails
+max_queries_per_agent: int = 3
+max_pages_per_query: int = 3
+max_chars_per_page: int = 10_000
+max_research_tokens: int = 8_000
+research_timeout_seconds: int = 60
 ```
 
 ---
 
-### Task 2: Create database models
+### Task 2: Create all database models
 
-**Objective:** Define SQLAlchemy ORM models for topics, histories, research_sources, push_subscriptions
+**Objective:** 7 SQLAlchemy ORM models matching the schema above
 
 **Files:**
 - Create: `backend/models/__init__.py`
+- Create: `backend/models/base.py` — shared DeclarativeBase
 - Create: `backend/models/topic.py`
+- Create: `backend/models/subtopic.py`
 - Create: `backend/models/history.py`
+- Create: `backend/models/profile.py`
+- Create: `backend/models/feedback.py`
+- Create: `backend/models/scoping_message.py`
 - Create: `backend/models/research_source.py`
-
-**topic.py:**
-```python
-import uuid
-from datetime import datetime
-from sqlalchemy import Column, String, Integer, DateTime, Text
-from sqlalchemy.orm import DeclarativeBase
-
-class Base(DeclarativeBase):
-    pass
-
-class Topic(Base):
-    __tablename__ = "topics"
-
-    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    title = Column(String, nullable=False)
-    status = Column(String, default="pending")
-    num_histories = Column(Integer, default=2)
-    num_research_agents = Column(Integer, default=3)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-```
-
-Similarly for History, ResearchSource, and PushSubscription models.
+- Create: `backend/models/push_subscription.py`
 
 ---
 
-### Task 3: Create PWA manifest + service-worker.js
+### Task 3: Create PWA manifest.json + service-worker.js
 
-**Objective:** Create PWA foundation files
+**Objective:** PWA foundation — installable, push-capable, offline-ready
 
 **Files:**
 - Create: `frontend/manifest.json`
 - Create: `frontend/service-worker.js`
 
-**manifest.json:**
-```json
-{
-  "name": "Historiador",
-  "short_name": "Historiador",
-  "start_url": "/",
-  "display": "standalone",
-  "background_color": "#1a1a2e",
-  "theme_color": "#0f3460",
-  "icons": [...]
-}
-```
-
-**service-worker.js:** Cache static assets, handle push events, show notifications on click.
-
 ---
 
 ### Task 4: Create database.py + migrations
 
-**Objective:** Set up SQLAlchemy engine, session factory, and table creation
+**Objective:** Async SQLAlchemy engine, session factory, table creation
 
 **Files:**
 - Create: `backend/database.py`
 - Create: `backend/migrations/__init__.py`
 - Create: `backend/migrations/init_db.py`
 
-**database.py:**
-```python
-from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
-from backend.config import settings
-
-engine = create_async_engine(settings.database_url, echo=False)
-async_session = async_sessionmaker(engine, expire_on_commit=False)
-
-async def get_db():
-    async with async_session() as session:
-        yield session
-```
-
 ---
 
-### Task 5: Create API Pydantic schemas
+### Task 5: Create all Pydantic schemas
 
-**Objective:** Define request/response schemas for all API endpoints
+**Objective:** Request/response schemas for all API endpoints
 
 **Files:**
 - Create: `backend/schemas/__init__.py`
 - Create: `backend/schemas/topic.py`
+- Create: `backend/schemas/subtopic.py`
 - Create: `backend/schemas/history.py`
+- Create: `backend/schemas/profile.py`
+- Create: `backend/schemas/scoping.py`
 - Create: `backend/schemas/kanban.py`
 
-**topic.py example:**
+**Scoping schemas:**
 ```python
-from pydantic import BaseModel
-from datetime import datetime
-from typing import Optional, List
+class ScopingAnswer(BaseModel):
+    topic_id: str
+    answer: str
 
-class TopicCreate(BaseModel):
-    title: str
-    num_histories: int = 2
-    num_research_agents: int = 3
-
-class TopicResponse(BaseModel):
+class ScopingMessageResponse(BaseModel):
     id: str
-    title: str
-    status: str
-    num_histories: int
-    num_research_agents: int
+    role: str  # 'agent' | 'user'
+    content: str
     created_at: datetime
-    updated_at: datetime
 
-class TopicDetail(TopicResponse):
-    histories: List["HistorySummary"] = []
+class SubtopicProposal(BaseModel):
+    subtopics: list[SubtopicCreate]
+
+class ScopingComplete(BaseModel):
+    scoping_summary: str
+    proposed_subtopics: list[SubtopicCreate]
 ```
 
 ---
 
 ### Task 6: Create LLM client
 
-**Objective:** Shared client for calling OpenAI-compatible API
+**Objective:** Shared HTTP client for OpenAI-compatible API
 
 **Files:**
 - Create: `backend/agents/__init__.py`
 - Create: `backend/agents/llm_client.py`
 
-**llm_client.py:**
-```python
-import httpx
-from backend.config import settings
-
-class LLMClient:
-    def __init__(self):
-        self.base_url = settings.llm_base_url
-        self.api_key = settings.llm_api_key
-        self.model = settings.llm_model
-
-    async def chat(self, messages: list, temperature: float = 0.7) -> str:
-        """Send a chat completion request and return the response text."""
-        async with httpx.AsyncClient() as client:
-            resp = await client.post(
-                f"{self.base_url}/chat/completions",
-                headers={"Authorization": f"Bearer {self.api_key}"},
-                json={
-                    "model": self.model,
-                    "messages": messages,
-                    "temperature": temperature,
-                },
-                timeout=120.0,
-            )
-            resp.raise_for_status()
-            data = resp.json()
-            return data["choices"][0]["message"]["content"]
-```
+Uses httpx with streaming for chat interactions. Supports both one-shot and streaming modes.
 
 ---
 
 ### Task 7: Create crawler/search/scraper
-
-**Objective:** Web search and content extraction utilities
 
 **Files:**
 - Create: `backend/crawler/__init__.py`
 - Create: `backend/crawler/search.py`
 - Create: `backend/crawler/scraper.py`
 
-**search.py:** Abstracts web search - supports Tavily, SerpAPI, and DuckDuckGo fallback
-**scraper.py:** Fetches and extracts text from web pages using aiohttp + BeautifulSoup
+Three search backends: Tavily, SerpAPI, DuckDuckGo fallback.
+Uses aiohttp for async HTTP, BeautifulSoup for extraction.
 
 ---
 
 ### Task 8: Create push notification module
 
-**Objective:** Send web push notifications when histories are created
-
 **Files:**
 - Create: `backend/notifications/__init__.py`
 - Create: `backend/notifications/push.py`
 
-**push.py:** Uses pywebpush to send notifications to subscribed browsers.
+Sends via pywebpush. Triggered when histories reach "in_review" status.
 
 ---
 
-### Task 9: Create Research Agent
+### Task 9: Create Scoping Agent
 
-**Objective:** Agent that researches a topic from a specific angle, bounded by hard limits
+**Objective:** Interactive Q&A to delimit a broad topic, then propose subtopics
 
 **Files:**
-- Modify: `backend/agents/__init__.py`
-- Create: `backend/agents/research_agent.py`
+- Create: `backend/agents/scoping_agent.py`
 
-```python
-class ResearchAgent:
-    """Researches a topic from a specific perspective.
-    
-    BOUNDED by:
-    - max_queries_per_agent: stops generating search terms after N
-    - max_pages_per_query: only scrapes top N results per query
-    - max_chars_per_page: truncates page content to N chars
-    - research_timeout_seconds: asyncio.wait_for kills the whole agent
-    """
+**Behavior:**
+1. User submits topic + profile → Scoping Agent generates first question
+2. Question stored in `scoping_messages` table (role='agent')
+3. User answers → stored (role='user') → agent generates follow-up
+4. After each answer, agent decides: "ask more" or "I have enough context"
+5. Max `max_scoping_rounds` rounds (default 5)
+6. When finalized → agent generates:
+   - `scoping_summary` — concise context for all downstream agents
+   - `proposed_subtopics` — list of 3-5 subtopics with descriptions
+   - these are returned to the UI and saved as Subtopic records (status='todo')
 
-    def __init__(self, perspective: str, llm: LLMClient, settings: Settings):
-        self.perspective = perspective
-        self.llm = llm
-        self.settings = settings
+**LLM prompt structure:**
+- System: "You are a topic scoping assistant. Your job is to ask questions..."
+- Previous messages: full scoping conversation
+- Output (when ready): JSON with { "ready": true, "summary": "...", "subtopics": [...] }
 
-    async def research(self, topic: str) -> ResearchResult:
-        """1. Generate search queries (capped by max_queries_per_agent)
-           2. Search web for each query (capped by max_pages_per_query)
-           3. Scrape top results (truncated by max_chars_per_page)
-           4. Use LLM to synthesize findings (capped by max_research_tokens)
-           
-           Entire method wrapped in asyncio.wait_for(timeout=research_timeout_seconds)
-        """
-```
-
-**Key implementation details:**
-- `asyncio.wait_for()` wraps the entire `research()` method with `research_timeout_seconds`
-- Search query generation prompt says "Generate at most {max_queries_per_agent} search queries"
-- Page content sliced to `content[:max_chars_per_page]`
-- Scraper fetches at most `max_pages_per_query` URLs per query
-- Any `asyncio.TimeoutError` is caught gracefully — the agent returns whatever it found so far
+**Interactive via API:**
+- POST `/api/topics/{id}/scoping/answer` → agent processes → returns next question or completion
+- The UI polls or receives the response and renders the chat
 
 ---
 
-### Task 10: Create Compiler Agent
+### Task 10: Create Research Agent (with guardrails)
 
-**Objective:** Merge all research agents' output into comprehensive context
+**Objective:** Crawl web for a specific subtopic, bounded by hard limits
+
+**Files:**
+- Create: `backend/agents/research_agent.py`
+
+Per subtopic. Runs asyncio.gather() for queries, capped at max_pages_per_query per query. Wrapped in asyncio.wait_for(timeout=research_timeout_seconds). Returns whatever it found if timeout hits.
+
+---
+
+### Task 11: Create Profile Agent
+
+**Objective:** Create, enhance, and learn-from-feedback for writing profiles
+
+**Files:**
+- Create: `backend/agents/profile_agent.py`
+
+**Creation flow:**
+1. User creates profile with just a name
+2. Profile Agent generates first question: "What tone do you want? (dramatic, educational, humorous, epic, neutral)"
+3. User answers → agent asks follow-ups (name, audience, length, style examples)
+4. After enough answers, profile is populated with structured fields
+
+**Enhancement flow:**
+- User clicks "Enhance ✨" on a profile
+- Agent reviews current profile stats (acceptance rate, patterns in feedback) and asks targeted questions
+- Answers update the profile's style_notes and creation_feedback
+
+**Feedback learning:**
+When a history that used this profile is accepted or rejected:
+- If accepted → profile is reinforced (stored in creation_feedback)
+- If rejected → agent analyzes the rejection pattern and suggests adjustments
+- If multiple rejections with same pattern → profile tone/style is automatically adjusted
+
+---
+
+### Task 12: Create Compiler Agent
+
+**Objective:** Merge research from all subtopics into one structured context
 
 **Files:**
 - Create: `backend/agents/compiler.py`
 
-```python
-class CompilerAgent:
-    """Takes all research outputs and compiles into structured context."""
-
-    async def compile(self, research_results: list[ResearchResult]) -> str:
-        """Deduplicate, organize by theme, produce comprehensive markdown context."""
-```
+Takes all ResearchResult objects, deduplicates by URL, organizes by theme.
 
 ---
 
-### Task 11: Create Writer Agent
+### Task 13: Create Writer Agent (with profiles)
 
-**Objective:** Create N markdown histories from compiled research
+**Objective:** Generate N histories using a specific profile
 
 **Files:**
 - Create: `backend/agents/writer.py`
 
 ```python
 class WriterAgent:
-    """Creates histories in YouTube-ready markdown format."""
-
-    async def write_histories(self, compiled_context: str, n: int = 2) -> list[dict]:
-        """Generate N distinct histories with proper structure."""
+    async def write_histories(
+        self,
+        compiled_context: str,
+        scoping_summary: str,
+        profile: Profile,
+        n: int = 2,
+    ) -> list[History]:
+        """Generate N histories with the profile's tone and style."""
 ```
 
-Output format:
-```markdown
-## Title: [Engaging Title]
-
-## Hook
-[15-second opening hook]
-
-## Narrative
-[Body with sections, storytelling flow]
-
-## Key Visuals
-[Suggested visuals for YouTube video]
-
-## Call to Action
-[Closing]
-```
+The system prompt includes the profile's full configuration: tone, audience, length, style_notes, creation_feedback (past learnings).
 
 ---
 
-### Task 12: Create Editor Agent
+### Task 14: Create Editor Agent (with feedback learning)
 
-**Objective:** Refine a history based on user feedback
+**Objective:** Refine a history based on user feedback, update profile
 
 **Files:**
 - Create: `backend/agents/editor.py`
 
 ```python
 class EditorAgent:
-    """Refines a history given user feedback."""
-
-    async def refine(self, history_content: str, feedback: str) -> str:
-        """Apply feedback and return improved markdown."""
+    async def refine(
+        self,
+        history_content: str,
+        feedback: str,
+        profile: Profile,
+        past_feedback: list[str],  # Similar past feedback for context
+    ) -> tuple[str, str | None]:
+        """Returns (refined_markdown, profile_suggestion_or_None)."""
+        # If feedback pattern matches previous rejections → suggest profile tweak
 ```
 
 ---
 
-### Task 13: Create Orchestrator
+### Task 15: Create Orchestrator
 
-**Objective:** Coordinate the entire agent workflow in the background
+**Objective:** Coordinate the entire lifecycle per topic
 
 **Files:**
 - Create: `backend/agents/orchestrator.py`
 
 ```python
 class Orchestrator:
-    """Manages the full lifecycle of a topic → histories pipeline."""
-
-    async def run(self, topic_id: str):
-        """Orchestrates: research → compile → write → notify."""
+    async def run_research(self, topic_id: str):
+        """Full pipeline for a topic after scoping is complete:
+        1. status = researching
+        2. For each SELECTED subtopic: spawn ResearchAgent (parallel)
+        3. status = compiling → CompilerAgent
+        4. status = writing → WriterAgent with profile
+        5. status = histories_created → save histories → push notification
+        """
 ```
-
-The orchestrator runs as a background task (FastAPI BackgroundTasks or asyncio.create_task).
 
 ---
 
-### Task 14: Create API routers - topics + histories
-
-**Objective:** CRUD endpoints for topics and histories
+### Task 16-18: Create all API routers
 
 **Files:**
-- Create: `backend/routers/__init__.py`
-- Create: `backend/routers/topics.py`
-- Create: `backend/routers/histories.py`
-
-**topics.py key endpoint:**
-```python
-@router.post("/topics")
-async def create_topic(data: TopicCreate, background_tasks: BackgroundTasks, db=Depends(get_db)):
-    """Create topic record, return immediately, kick off orchestrator in background."""
-```
+- `backend/routers/topics.py` — CRUD + scoping endpoints
+- `backend/routers/subtopics.py` — select/deselect, trigger research
+- `backend/routers/histories.py` — CRUD + refine + approve/reject
+- `backend/routers/kanban.py` — board state
+- `backend/routers/profiles.py` — CRUD + enhance
+- `backend/routers/notifications.py` — push subscription
 
 ---
 
-### Task 15: Create API routers - kanban + notifications
+### Task 19: Create FastAPI main.py
 
-**Objective:** Kanban board state + notification subscription endpoints
-
-**Files:**
-- Create: `backend/routers/kanban.py`
-- Create: `backend/routers/notifications.py`
-
-**kanban.py:**
-```python
-@router.get("/kanban")
-async def get_kanban(db=Depends(get_db)):
-    """Return all topics+histories grouped by status for kanban rendering."""
-    # Returns: { researching: [...], compiled: [...], in_review: [...], refining: [...], accepted: [...], rejected: [...] }
-```
-
----
-
-### Task 16: Create FastAPI main.py
-
-**Objective:** Wire up all routers, CORS, lifespan, static file serving
+**Objective:** Wire everything up
 
 **Files:**
 - Create: `backend/main.py`
 
-```python
-from fastapi import FastAPI
-from fastapi.staticfiles import StaticFiles
-from contextlib import asynccontextmanager
-from backend.database import engine
-from backend.models.topic import Base
-from backend.routers import topics, histories, kanban, notifications
+Mounts static files at `/`, includes all routers, CORS, lifespan (creates tables).
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-    yield
+---
 
-app = FastAPI(title="Historiador", lifespan=lifespan)
-# CORS middleware
-# Mount static files for frontend
-# Include routers
+### Task 20-28: Frontend
+
+**20: CSS** — Dark theme. CSS variables for colors. Kanban columns as flexbox. Chat bubbles. Responsive.
+
+**21: api.js + notifications.js** — Fetch-based API client with `getTopcis()`, `submitAnswer()`, `approveHistory()`, etc.
+
+**22: index.html + finalize PWA** — SPA shell with nav, content div for hash-based routing.
+
+**23: topic-form.js + scoping-chat.js** — New topic form. Interactive chat UI with message bubbles.
+
+**24: subtopic-selector.js** — Checkbox list with descriptions, "Research Now" action.
+
+**25: kanban.js** — Columns: Scoping → Researching → Compiling → Writing → In Review → Accepted → Rejected. Cards show title, subtitle, status icon. Auto-refreshes every 5s while agents are running.
+
+**26: history-viewer.js** — Renders markdown (simple regex-based or marked library). Approve/Reject/Refine buttons. Refinement modal with textarea.
+
+**27: profile-manager.js** — List profiles with stats. Create new. Enhance button. Acceptance rates.
+
+**28: app.js** — Hash router: #kanban, #new-topic, #scoping/:id, #subtopics/:id, #history/:id, #profiles. Auto-refresh kanban. Service worker registration.
+
+---
+
+### Task 29: README.md + run.sh
+
+**README**: Setup instructions, env vars, how to run, architecture overview.
+
+**run.sh**: 
+```bash
+#!/bin/bash
+cd "$(dirname "$0")/.."
+uv sync
+uv run uvicorn backend.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
 ---
 
-### Task 17: Create frontend CSS
+### Task 30: End-to-end test
 
-**Objective:** Styling for PWA — dark theme, kanban board, history viewer
-
-**Files:**
-- Create: `frontend/css/app.css`
-
-Dark theme kanban board with draggable cards. Status-colored columns.
-
----
-
-### Task 18: Create frontend JS - API client + notifications
-
-**Objective:** API wrapper and push notification registration
-
-**Files:**
-- Create: `frontend/js/api.js`
-- Create: `frontend/js/notifications.js`
-
-**api.js:** Fetch-based client, all endpoints
-**notifications.js:** Service worker registration, push subscription management
-
----
-
-### Task 19: Create frontend HTML structure
-
-**Objective:** Main SPA shell with navigation
-
-**Files:**
-- Create: `frontend/index.html`
-
-Navigation: Kanban view | Topic creation | History viewer
-
----
-
-### Task 20: Create kanban.js
-
-**Objective:** Kanban board rendering with drag-drop
-
-**Files:**
-- Create: `frontend/js/kanban.js`
-
-Columns: Researching → Compiling → Writing → In Review → Refining → Accepted → Rejected
-
----
-
-### Task 21: Create history-viewer.js
-
-**Objective:** Markdown rendering + action buttons
-
-**Files:**
-- Create: `frontend/js/history-viewer.js`
-
-Renders markdown, shows Approve/Reject/Refine buttons, refinement feedback modal.
-
----
-
-### Task 22: Wire up app.js
-
-**Objective:** Main app controller — routing, page switching, initial load
-
-**Files:**
-- Create: `frontend/js/app.js`
-
-Router: hash-based (/#kanban, /#history/xxx).
-Auto-refresh kanban every 10 seconds. Notification click handling.
-
----
-
-### Task 23: Create README.md + .env.example + run.sh
-
-**Objective:** Documentation and setup scripts
-
-**Files:**
-- Create: `README.md`
-- Create: `.env.example`
-- Create: `scripts/run.sh`
-
----
-
-### Task 24: End-to-end test
-
-**Objective:** Verify the entire system works end-to-end
-
-**Steps:**
-1. Run `uv sync`
-2. Run `python -m backend.main` or `uv run uvicorn backend.main:app`
-3. Create a topic via API
-4. Verify research agents run, compiler runs, writer runs
-5. Verify histories appear in kanban
-6. Test approve/reject/refine flow
-7. Run full test suite
-
----
-
-## Future Considerations (Not in Scope Yet)
-
-- YouTube API integration for direct video creation
-- Multiple output formats (HTML, PDF, SRT)
-- User authentication / multi-tenant
-- Docker deployment
-- Agent progress streaming via WebSockets
-- History version history
+1. `uv sync && uv run uvicorn backend.main:app --port 8000`
+2. Open browser → should see Kanban board
+3. Create topic "The French Revolution" with profile "Epic Storyteller"
+4. Should enter scoping chat — answer questions
+5. Complete scoping → subtopics appear
+6. Select 2, start research
+7. Wait for histories to appear (poll kanban)
+8. Open a history → markdown rendered → Approve/Reject/Refine
+9. Create a new profile → enhance with questions
+10. Verify subtopic TODO items persist for next time
