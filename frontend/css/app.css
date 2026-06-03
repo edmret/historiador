@@ -1,0 +1,135 @@
+/* Historiador — Dark Theme */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg-primary: #1a1a2e;
+  --bg-secondary: #16213e;
+  --bg-card: #1f2a47;
+  --accent: #0f3460;
+  --accent-light: #1a4f8a;
+  --highlight: #e94560;
+  --text-primary: #eaeaea;
+  --text-secondary: #a0a0b0;
+  --text-muted: #6b7280;
+  --success: #22c55e;
+  --warning: #f59e0b;
+  --danger: #ef4444;
+  --border: #2a3a5c;
+  --radius: 12px;
+  --radius-sm: 8px;
+  --shadow: 0 4px 24px rgba(0,0,0,0.3);
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  min-height: 100vh;
+  line-height: 1.6;
+}
+
+/* Layout */
+.app-container { max-width: 1100px; margin: 0 auto; padding: 16px; }
+.app-header { display: flex; align-items: center; justify-content: space-between; padding: 16px 0; border-bottom: 1px solid var(--border); margin-bottom: 24px; }
+.app-header h1 { font-size: 1.5rem; color: var(--highlight); font-weight: 700; }
+.app-nav { display: flex; gap: 8px; }
+.app-nav a { color: var(--text-secondary); text-decoration: none; padding: 8px 16px; border-radius: var(--radius-sm); transition: all 0.2s; }
+.app-nav a:hover, .app-nav a.active { color: var(--text-primary); background: var(--accent); }
+
+/* Cards */
+.card { background: var(--bg-card); border-radius: var(--radius); padding: 20px; border: 1px solid var(--border); box-shadow: var(--shadow); margin-bottom: 16px; }
+.card-title { font-size: 1.1rem; font-weight: 600; margin-bottom: 12px; color: var(--text-primary); }
+.card-subtitle { color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 8px; }
+
+/* Buttons */
+.btn { display: inline-flex; align-items: center; gap: 6px; padding: 10px 20px; border: none; border-radius: var(--radius-sm); font-size: 0.9rem; font-weight: 500; cursor: pointer; transition: all 0.2s; text-decoration: none; }
+.btn-primary { background: var(--accent); color: var(--text-primary); }
+.btn-primary:hover { background: var(--accent-light); }
+.btn-highlight { background: var(--highlight); color: white; }
+.btn-highlight:hover { opacity: 0.9; }
+.btn-success { background: var(--success); color: white; }
+.btn-warning { background: var(--warning); color: #1a1a2e; }
+.btn-danger { background: var(--danger); color: white; }
+.btn-sm { padding: 6px 12px; font-size: 0.8rem; }
+.btn-outline { background: transparent; border: 1px solid var(--border); color: var(--text-secondary); }
+.btn-outline:hover { border-color: var(--accent); color: var(--text-primary); }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* Forms */
+.form-group { margin-bottom: 16px; }
+.form-group label { display: block; margin-bottom: 6px; color: var(--text-secondary); font-size: 0.9rem; }
+.form-input, .form-textarea, .form-select { width: 100%; padding: 10px 14px; background: var(--bg-primary); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text-primary); font-size: 0.95rem; transition: border-color 0.2s; }
+.form-input:focus, .form-textarea:focus, .form-select:focus { outline: none; border-color: var(--accent-light); }
+.form-textarea { min-height: 80px; resize: vertical; }
+
+/* Badges */
+.badge { display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: 0.75rem; font-weight: 500; }
+.badge-todo { background: var(--text-muted); color: white; }
+.badge-selected { background: var(--accent); color: white; }
+.badge-researching { background: var(--warning); color: #1a1a2e; }
+.badge-done { background: var(--success); color: white; }
+.badge-review { background: var(--accent-light); color: white; }
+.badge-accepted { background: var(--success); color: white; }
+.badge-rejected { background: var(--danger); color: white; }
+.badge-refining { background: var(--warning); color: #1a1a2e; }
+
+/* Kanban Board */
+.kanban-lanes { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; margin-top: 16px; }
+.kanban-lane { background: var(--bg-secondary); border-radius: var(--radius); padding: 12px; min-height: 200px; }
+.kanban-lane-title { font-weight: 600; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 2px solid var(--border); }
+.kanban-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 12px; margin-bottom: 8px; cursor: pointer; transition: all 0.2s; }
+.kanban-card:hover { border-color: var(--accent-light); transform: translateY(-1px); }
+.kanban-card-title { font-weight: 500; margin-bottom: 4px; }
+.kanban-card-meta { font-size: 0.75rem; color: var(--text-muted); }
+
+/* Chat */
+.chat-messages { max-height: 400px; overflow-y: auto; padding: 12px; background: var(--bg-secondary); border-radius: var(--radius-sm); margin-bottom: 12px; }
+.chat-message { margin-bottom: 12px; padding: 10px 14px; border-radius: var(--radius-sm); max-width: 80%; }
+.chat-message.agent { background: var(--accent); color: var(--text-primary); margin-right: auto; }
+.chat-message.user { background: var(--highlight); color: white; margin-left: auto; }
+.chat-message .role { font-size: 0.7rem; text-transform: uppercase; opacity: 0.7; margin-bottom: 4px; }
+.chat-input { display: flex; gap: 8px; }
+.chat-input .form-input { flex: 1; }
+
+/* History Viewer */
+.history-content { line-height: 1.8; }
+.history-content h1 { color: var(--highlight); margin: 20px 0 12px; font-size: 1.5rem; }
+.history-content h2 { color: var(--accent-light); margin: 16px 0 8px; font-size: 1.2rem; }
+.history-content p { margin-bottom: 12px; }
+.history-content strong { color: var(--text-primary); }
+
+/* Subtopic List */
+.subtopic-item { display: flex; align-items: center; gap: 12px; padding: 10px 14px; background: var(--bg-secondary); border-radius: var(--radius-sm); margin-bottom: 8px; cursor: pointer; transition: all 0.2s; }
+.subtopic-item:hover { background: var(--bg-card); }
+.subtopic-checkbox { width: 20px; height: 20px; accent-color: var(--highlight); }
+.subtopic-info { flex: 1; }
+.subtopic-title { font-weight: 500; }
+.subtopic-desc { font-size: 0.85rem; color: var(--text-muted); }
+
+/* Loading */
+.spinner { width: 32px; height: 32px; border: 3px solid var(--border); border-top-color: var(--highlight); border-radius: 50%; animation: spin 0.8s linear infinite; margin: 20px auto; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.loading-overlay { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 40px; color: var(--text-secondary); }
+
+/* Empty state */
+.empty-state { text-align: center; padding: 60px 20px; color: var(--text-muted); }
+.empty-state-icon { font-size: 3rem; margin-bottom: 12px; }
+
+/* Toast */
+.toast { position: fixed; bottom: 24px; right: 24px; padding: 12px 20px; border-radius: var(--radius-sm); color: white; font-weight: 500; z-index: 1000; animation: slideIn 0.3s ease; }
+.toast-success { background: var(--success); }
+.toast-error { background: var(--danger); }
+.toast-info { background: var(--accent-light); }
+@keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+
+/* Responsive */
+@media (max-width: 768px) {
+  .app-header { flex-direction: column; gap: 12px; }
+  .kanban-lanes { grid-template-columns: 1fr; }
+  .chat-message { max-width: 100%; }
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 8px; }
+::-webkit-scrollbar-track { background: var(--bg-primary); }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: var(--accent); }
