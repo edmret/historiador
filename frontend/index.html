@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#0f3460">
+  <meta name="description" content="Multi-agent history generation and review system">
+  <link rel="manifest" href="/manifest.json">
+  <link rel="icon" href="/assets/icons/icon.svg" type="image/svg+xml">
+  <title>Historiador</title>
+  <link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+  <div class="app-container">
+    <header class="app-header">
+      <h1>Historiador</h1>
+      <nav class="app-nav">
+        <a href="#/new" class="active" data-route="new">New Topic</a>
+        <a href="#/kanban" data-route="kanban">Kanban</a>
+        <a href="#/profiles" data-route="profiles">Profiles</a>
+      </nav>
+    </header>
+    <main id="app">
+      <div class="loading-overlay">
+        <div class="spinner"></div>
+        <p>Loading Historiador...</p>
+      </div>
+    </main>
+  </div>
+
+  <script src="/js/api.js"></script>
+  <script src="/js/notifications.js"></script>
+  <script src="/js/kanban.js"></script>
+  <script src="/js/topic-form.js"></script>
+  <script src="/js/scoping-chat.js"></script>
+  <script src="/js/subtopic-selector.js"></script>
+  <script src="/js/history-viewer.js"></script>
+  <script src="/js/profile-manager.js"></script>
+  <script src="/js/app.js"></script>
+</body>
+</html>
