@@ -53,9 +53,10 @@ Open http://localhost:8080 in your browser.
 | `LLM_API_KEY` | — | API key for the LLM provider |
 | `LLM_BASE_URL` | `https://api.nan.builders/v1` | OpenAI-compatible base URL |
 | `LLM_MODEL` | `deepseek-v4-flash` | Model name |
-| `SEARCH_PROVIDER` | `tavily` | Search provider (`tavily` or `serpapi`) |
-| `TAVILY_API_KEY` | — | Tavily Search API key |
-| `SERPAPI_API_KEY` | — | SerpAPI key (alternative) |
+|| `SEARCH_PROVIDER` | `duckduckgo` | Search provider (`duckduckgo`, `direct`, `hermes`, `tavily`, `serpapi`, `mock`) |
+|| `TAVILY_API_KEY` | — | Tavily Search API key (only needed for `tavily` provider) |
+|| `SERPAPI_API_KEY` | — | SerpAPI key (only needed for `serpapi` provider) |
+|| `HERMES_PATH` | `hermes` | Path to the Hermes CLI binary (only needed for `hermes` provider) |
 | `DEFAULT_NUM_HISTORIES` | `2` | Number of histories to generate per topic |
 | `DEFAULT_NUM_RESEARCH_AGENTS` | `3` | Number of parallel research agents |
 | `MAX_QUERIES_PER_AGENT` | `3` | Max search queries per research agent |
@@ -100,7 +101,7 @@ Profiles learn from feedback over time via the feedback records stored in SQLite
 - **Backend**: Python 3.13, FastAPI, SQLAlchemy 2.0 (async), SQLite, aiohttp, httpx
 - **Frontend**: Vanilla JS, CSS custom properties, PWA (service worker + manifest)
 - **LLM**: OpenAI-compatible API (any provider)
-- **Search**: Tavily or SerpAPI (mock fallback when no key configured)
+- **Search**: DuckDuckGo (free, default), Direct DuckDuckGo scraping, Hermes CLI subagent, Tavily, or SerpAPI
 
 ## Project Structure
 

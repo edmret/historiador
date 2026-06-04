@@ -16,10 +16,15 @@ dependencies = [
     "python-dotenv>=1.0.0",
     "pydantic>=2.0.0",
     "pydantic-settings>=2.0.0",
+    "ddgs>=6.1.0; python_version<\"3.13\"",
+    "duckduckgo-search>=6.1.0; python_version>=\"3.13\"",
 ]
 
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0.0",
     "pytest-asyncio>=0.24.0",
+]
+playwright = [
+    "playwright>=1.45.0",
 ]

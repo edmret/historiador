@@ -5,9 +5,10 @@ class Settings(BaseSettings):
     llm_api_key: str = ""
     llm_base_url: str = "https://api.nan.builders/v1"
     llm_model: str = "deepseek-v4-flash"
-    search_provider: str = "tavily"
+    search_provider: str = "duckduckgo"
     tavily_api_key: str = ""
     serpapi_api_key: str = ""
+    hermes_path: str = "hermes"  # path/command to the hermes CLI binary
     vapid_public_key: str = ""
     vapid_private_key: str = ""
     vapid_claim_email: str = "admin@historiador.app"
