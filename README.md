@@ -32,21 +32,29 @@ User → Scoping Agent → Research Agents × N → Compiler → Writer → Edit
 ## Quick Start
 
 ```bash
-# 1. Install dependencies
-uv sync
+# Install dependencies and start (full command)
+make install
+make setup       # interactive wizard on first run
+make start
 
-# 2. Run the setup wizard (interactive)
-uv run python scripts/setup.py
-
-# Or use quick mode and edit .env manually:
-# uv run python scripts/setup.py --quick
-
-# 3. Start the server
-bash scripts/run.sh
-# Or directly: uvicorn backend.main:app --reload
+# Or in one line (skips setup if .env already exists):
+make install && make start
 ```
 
 Open http://localhost:8080 in your browser.
+
+### Available Make Targets
+
+| Target | Description |
+|--------|-------------|
+| `make install` | Install Python dependencies via `uv sync` |
+| `make setup`   | Run the interactive setup wizard |
+| `make start`   | Start the server (auto-runs setup if `.env` missing) |
+| `make dev`     | Start with hot reload (no auto-setup) |
+| `make test`    | Run the test suite |
+| `make lint`    | Syntax-check all Python files |
+| `make migrate` | Create/seed the database (no server needed) |
+| `make clean`   | Remove caches and `.db` files |
 
 ## Configuration
 
