@@ -8,13 +8,16 @@ from fastapi.staticfiles import StaticFiles
 
 from backend.config import settings
 from backend.database import init_db
-from backend.routers import topics, profiles, histories, pipeline, notifications
+from backend.services.app_config_service import get_app_config_service
+from backend.routers import topics, profiles, histories, pipeline, notifications, config
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Initialize database on startup."""
+    """Initialize database and config on startup."""
     await init_db()
+    svc = get_app_config_service()
+    await svc.seed_defaults()
     yield
     from backend.database import engine
     await engine.dispose()
@@ -42,6 +45,7 @@ app.include_router(profiles.router)
 app.include_router(histories.router)
 app.include_router(pipeline.router)
 app.include_router(notifications.router)
+app.include_router(config.router)
 
 # Serve frontend static files
 frontend_dir = Path(__file__).resolve().parent.parent / "frontend"

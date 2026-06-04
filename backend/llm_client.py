@@ -7,10 +7,15 @@ from backend.config import settings
 class LLMClient:
     """Async OpenAI-compatible LLM client."""
 
-    def __init__(self, api_key: Optional[str] = None, base_url: Optional[str] = None, model: Optional[str] = None):
-        self.api_key = api_key or settings.llm_api_key
-        self.base_url = (base_url or settings.llm_base_url).rstrip("/")
-        self.model = model or settings.llm_model
+    def __init__(self, api_key: Optional[str] = None, base_url: Optional[str] = None, model: Optional[str] = None, config: Optional[dict] = None):
+        if config:
+            self.api_key = config.get("api_key", "") or settings.llm_api_key
+            self.base_url = (config.get("base_url", "") or settings.llm_base_url).rstrip("/")
+            self.model = config.get("model", "") or settings.llm_model
+        else:
+            self.api_key = api_key or settings.llm_api_key
+            self.base_url = (base_url or settings.llm_base_url).rstrip("/")
+            self.model = model or settings.llm_model
 
     async def chat(
         self,

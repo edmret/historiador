@@ -56,6 +56,7 @@ Router.register("/scoping/:topicId", (topicId) => ScopingChat.render(topicId));
 Router.register("/subtopics/:topicId", (topicId) => SubtopicSelector.render(topicId));
 Router.register("/history/:historyId", (historyId) => HistoryViewer.render(historyId));
 Router.register("/profiles", () => ProfileManager.render());
+Router.register("/settings", () => SettingsPage.render());
 
 // Handle hash changes
 window.addEventListener("hashchange", () => Router.resolve());

@@ -24,19 +24,28 @@ from backend.agents.writer_agent import WriterAgent
 from backend.agents.editor_agent import EditorAgent
 from backend.notifications.push import PushNotifier
 from backend.config import settings
+from backend.services.app_config_service import get_app_config_service
 
 
 class HistoriadorOrchestrator:
     """Orchestrates the multi-agent history generation pipeline."""
 
     def __init__(self):
-        self.llm = LLMClient()
-        self.scoping_agent = ScopingAgent(self.llm)
-        self.research_agent_factory = lambda name: ResearchAgent(name, self.llm)
-        self.profile_agent = ProfileAgent(self.llm)
-        self.compiler = CompilerAgent(self.llm)
-        self.writer = WriterAgent(self.llm)
-        self.editor = EditorAgent(self.llm)
+        app_config = get_app_config_service()
+
+        self.scoping_llm = LLMClient(config=app_config.get_agent_config_sync("scoping"))
+        self.research_llm = LLMClient(config=app_config.get_agent_config_sync("research"))
+        self.compiler_llm = LLMClient(config=app_config.get_agent_config_sync("compiler"))
+        self.writer_llm = LLMClient(config=app_config.get_agent_config_sync("writer"))
+        self.editor_llm = LLMClient(config=app_config.get_agent_config_sync("editor"))
+        self.profile_llm = LLMClient(config=app_config.get_agent_config_sync("profile"))
+
+        self.scoping_agent = ScopingAgent(self.scoping_llm)
+        self.research_agent_factory = lambda name: ResearchAgent(name, self.research_llm)
+        self.profile_agent = ProfileAgent(self.profile_llm)
+        self.compiler = CompilerAgent(self.compiler_llm)
+        self.writer = WriterAgent(self.writer_llm)
+        self.editor = EditorAgent(self.editor_llm)
         self.notifier = PushNotifier()
 
     # --- Topic Creation & Scoping ---

@@ -1,5 +1,7 @@
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession, AsyncEngine
 from backend.models.base import Base
+# Import all models so their metadata is registered with Base for table creation.
+import backend.models  # noqa: F401  # side-effect: registers all model subclasses
 from backend.config import settings
 
 engine: AsyncEngine = create_async_engine(settings.database_url, echo=False)

@@ -225,10 +225,17 @@ def init_database():
     try:
         sys.path.insert(0, str(PROJECT_ROOT))
         from backend.database import init_db, engine
+        from backend.services.app_config_service import get_app_config_service
         import asyncio
 
         asyncio.run(init_db())
         print("  Database initialized successfully")
+
+        # Seed config into DB
+        print("  Seeding default configuration into database...")
+        svc = get_app_config_service()
+        asyncio.run(svc.seed_defaults())
+        print("  Configuration seeded successfully")
     except ImportError as e:
         print(f"  Could not import backend: {e}")
         print("  Run 'uv run python backend/migrations/run.py' manually.")

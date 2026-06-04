@@ -7,6 +7,7 @@ from backend.models.feedback import FeedbackRecord
 from backend.models.scoping_message import ScopingMessage
 from backend.models.research_source import ResearchSource
 from backend.models.push_subscription import PushSubscription
+from backend.models.app_config import AppConfig
 
 __all__ = [
     "Base",
@@ -18,4 +19,5 @@ __all__ = [
     "ScopingMessage",
     "ResearchSource",
     "PushSubscription",
+    "AppConfig",
 ]
