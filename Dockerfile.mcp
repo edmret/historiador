@@ -1,0 +1,44 @@
+# ── Build stage ──────────────────────────────────────────────────────────────
+FROM python:3.13-slim AS builder
+
+RUN pip install --no-cache-dir uv
+
+WORKDIR /build
+
+COPY pyproject.toml uv.lock ./
+RUN uv sync --frozen --no-install-project
+
+COPY backend/ backend/
+COPY scripts/ scripts/
+
+# ── Production stage ────────────────────────────────────────────────────────
+FROM python:3.13-slim AS production
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libsqlite3-0 \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN groupadd -r historian && useradd -r -g historian -m -d /home/historian historian
+WORKDIR /home/historian
+
+COPY --from=builder /build/.venv /home/historian/.venv
+COPY --from=builder /build/backend/ /home/historian/backend/
+COPY --from=builder /build/scripts/ /home/historian/scripts/
+
+RUN mkdir -p /home/historian/data && chown -R historian:historian /home/historian
+
+USER historian
+
+ENV PATH="/home/historian/.venv/bin:$PATH"
+ENV PYTHONUNBUFFERED=1
+ENV DATABASE_URL=sqlite+aiosqlite:///./data/historiador.db
+
+EXPOSE 8081
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
+    CMD python3 -c "import urllib.request; urllib.request.urlopen('http://localhost:8081/')" || exit 1
+
+# Default to SSE mode; override with args if needed (e.g., --stdio)
+CMD ["python3", "backend/mcp_server.py", "--sse"]

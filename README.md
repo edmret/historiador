@@ -294,6 +294,83 @@ Profiles learn from feedback over time via the feedback records stored in SQLite
 - **Auth**: Stytch (passwordless magic links + API tokens)
 - **MCP**: Model Context Protocol (stdio + SSE transports)
 
+## Deployment
+
+### Docker Compose (Recommended)
+
+```bash
+# 1. Clone and configure
+git clone git@github.com:edmret/historiador.git
+cd historiador
+cp .env.example .env
+# Edit .env with your LLM_API_KEY and other settings
+
+# 2. Build and start
+docker compose up --build -d
+
+# 3. Open
+# Web UI:   http://localhost:8080
+# MCP SSE:  http://localhost:8081
+```
+
+This starts two containers:
+- **historiador** — FastAPI server + static frontend on `:8080`
+- **mcp** — MCP server on `:8081`
+
+Both share a Docker volume (`historian-data`) for the SQLite database, so data persists across restarts.
+
+### Environment Variables
+
+Set these in `.env` before deploying (or pass via `docker compose run -e`):
+
+| Variable | Required | Note |
+|----------|----------|------|
+| `LLM_API_KEY` | ✅ | Your LLM provider API key |
+| `LLM_BASE_URL` | ✅ | OpenAI-compatible base URL |
+| `LLM_MODEL` | — | Default: `deepseek-v4-flash` |
+| `DATABASE_URL` | — | Auto‑configured to use the persisted volume |
+| `STYTCH_PROJECT_ID` | — | Optional: enable auth |
+| `STYTCH_SECRET` | — | Optional: enable auth |
+| `STYTCH_PUBLIC_TOKEN` | — | Optional: enable auth |
+
+All other settings (search provider, VAPID keys, per‑agent models, pipeline limits) can be edited live in the **Settings** panel after first run.
+
+### Health Checks
+
+Both containers include Docker health checks. Check status with:
+
+```bash
+docker compose ps
+docker compose logs historian
+docker compose logs mcp
+```
+
+### Updating
+
+```bash
+docker compose down
+git pull
+docker compose up --build -d
+```
+
+### Custom Ports
+
+Override the host ports via environment variables:
+
+```bash
+# Run the web UI on port 9000 and MCP on 9001
+HOST_PORT=9000 MCP_HOST_PORT=9001 docker compose up --build -d
+```
+
+### Dockerfile Reference
+
+| File | Purpose |
+|------|---------|
+| `Dockerfile` | Multi-stage build for the FastAPI backend (Python 3.13-slim, uv, non-root user) |
+| `Dockerfile.mcp` | Same pattern for the MCP SSE server |
+| `docker-compose.yml` | Two services sharing a Docker volume for SQLite persistence |
+| `.dockerignore` | Build context exclusions |
+
 ## Project Structure
 
 ```
@@ -322,6 +399,10 @@ historiador/
 │   └── service-worker.js# PWA service worker
 ├── scripts/
 │   └── run.sh           # Server startup script
+├── Dockerfile           # Production Docker image
+├── Dockerfile.mcp       # MCP server Docker image
+├── docker-compose.yml   # Multi-service deployment
+├── .dockerignore        # Docker build exclusions
 ├── pyproject.toml       # Python dependencies
 ├── .env.example         # Environment template
 └── README.md
