@@ -1,0 +1,36 @@
+# ── Build stage ──────────────────────────────────────────────────────────────
+FROM python:3.13-slim AS builder
+
+RUN pip install --no-cache-dir uv
+
+WORKDIR /build
+
+COPY pyproject.toml uv.lock ./
+RUN uv sync --frozen --no-install-project
+
+COPY backend/ backend/
+COPY scripts/ scripts/
+
+# ── Production stage ────────────────────────────────────────────────────────
+FROM python:3.13-slim AS production
+
+RUN useradd --create-home --shell /bin/bash historian
+WORKDIR /home/historian
+
+COPY --from=builder /build/.venv /home/historian/.venv
+COPY --from=builder /build/backend/ /home/historian/backend/
+COPY --from=builder /build/scripts/ /home/historian/scripts/
+
+RUN mkdir -p /home/historian/data && chown -R historian:historian /home/historian
+
+USER historian
+
+ENV PATH="/home/historian/.venv/bin:$PATH"
+ENV PYTHONUNBUFFERED=1
+
+EXPOSE 8081
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD python3 -c "import urllib.request; urllib.request.urlopen('http://localhost:8081/')" || exit 1
+
+CMD ["python3", "backend/mcp_server.py", "--sse"]
