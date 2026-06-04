@@ -19,8 +19,14 @@ COPY scripts/ scripts/
 # ── Production stage ────────────────────────────────────────────────────────
 FROM python:3.13-slim AS production
 
+# Install system dependencies (for SQLite, etc.)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libsqlite3-0 \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
 # Non-root user
-RUN useradd --create-home --shell /bin/bash historian
+RUN groupadd -r historian && useradd -r -g historian -m -d /home/historian historian
 WORKDIR /home/historian
 
 # Copy uv-installed packages from builder
@@ -31,20 +37,21 @@ COPY --from=builder /build/backend/ /home/historian/backend/
 COPY --from=builder /build/scripts/ /home/historian/scripts/
 
 # Copy frontend static files
-COPY frontend/ /home/historian/frontend/
+COPY --from=builder /build/frontend/ /home/historian/frontend/
 
-# Create data directory for SQLite
+# Create data directory for SQLite persistence
 RUN mkdir -p /home/historian/data && chown -R historian:historian /home/historian
 
 USER historian
 
 ENV PATH="/home/historian/.venv/bin:$PATH"
 ENV PYTHONUNBUFFERED=1
+ENV DATABASE_URL=sqlite+aiosqlite:///./data/historiador.db
 
 EXPOSE 8080
 
 # Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
     CMD python3 -c "import urllib.request; urllib.request.urlopen('http://localhost:8080/api/auth/config')" || exit 1
 
 # Start the server (no --reload in production)

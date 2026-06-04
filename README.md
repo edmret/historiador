@@ -353,6 +353,24 @@ git pull
 docker compose up --build -d
 ```
 
+### Custom Ports
+
+Override the host ports via environment variables:
+
+```bash
+# Run the web UI on port 9000 and MCP on 9001
+HOST_PORT=9000 MCP_HOST_PORT=9001 docker compose up --build -d
+```
+
+### Dockerfile Reference
+
+| File | Purpose |
+|------|---------|
+| `Dockerfile` | Multi-stage build for the FastAPI backend (Python 3.13-slim, uv, non-root user) |
+| `Dockerfile.mcp` | Same pattern for the MCP SSE server |
+| `docker-compose.yml` | Two services sharing a Docker volume for SQLite persistence |
+| `.dockerignore` | Build context exclusions |
+
 ## Project Structure
 
 ```
