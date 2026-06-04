@@ -50,15 +50,22 @@ Open http://localhost:8080 in your browser.
 
 ## Configuration
 
+### Environment Variables
+
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `LLM_API_KEY` | — | API key for the LLM provider |
 | `LLM_BASE_URL` | `https://api.nan.builders/v1` | OpenAI-compatible base URL |
-| `LLM_MODEL` | `deepseek-v4-flash` | Model name |
-|| `SEARCH_PROVIDER` | `duckduckgo` | Search provider (`duckduckgo`, `direct`, `hermes`, `tavily`, `serpapi`, `mock`) |
-|| `TAVILY_API_KEY` | — | Tavily Search API key (only needed for `tavily` provider) |
-|| `SERPAPI_API_KEY` | — | SerpAPI key (only needed for `serpapi` provider) |
-|| `HERMES_PATH` | `hermes` | Path to the Hermes CLI binary (only needed for `hermes` provider) |
+| `LLM_MODEL` | `deepseek-v4-flash` | Default model name (used when no per-agent override) |
+| `SEARCH_PROVIDER` | `duckduckgo` | Search provider (`duckduckgo`, `direct`, `hermes`, `tavily`, `serpapi`, `mock`) |
+| `TAVILY_API_KEY` | — | Tavily Search API key (only needed for `tavily` provider) |
+| `SERPAPI_API_KEY` | — | SerpAPI key (only needed for `serpapi` provider) |
+| `HERMES_PATH` | `hermes` | Path to the Hermes CLI binary (only needed for `hermes` provider) |
+| `VAPID_PUBLIC_KEY` | — | VAPID public key for web push |
+| `VAPID_PRIVATE_KEY` | — | VAPID private key for web push |
+| `VAPID_CLAIM_EMAIL` | `admin@historiador.app` | Email for VAPID subscription claims |
+| `DATABASE_URL` | `sqlite+aiosqlite:///./historiador.db` | SQLAlchemy database URL |
+| `CORS_ORIGINS` | `*` | Comma-separated allowed CORS origins |
 | `DEFAULT_NUM_HISTORIES` | `2` | Number of histories to generate per topic |
 | `DEFAULT_NUM_RESEARCH_AGENTS` | `3` | Number of parallel research agents |
 | `MAX_QUERIES_PER_AGENT` | `3` | Max search queries per research agent |
@@ -66,6 +73,30 @@ Open http://localhost:8080 in your browser.
 | `MAX_CHARS_PER_PAGE` | `10000` | Max characters to extract per page |
 | `RESEARCH_TIMEOUT_SECONDS` | `60` | Per-agent research timeout |
 | `MAX_SCOPING_ROUNDS` | `5` | Max Q&A rounds before scoping completes |
+
+### Per-Agent Model Selection
+
+Each agent can use a different model. Set these in the **Settings** panel or via `.env`:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `SCOPING_MODEL` | *(same as `LLM_MODEL`)* | Model for the scoping agent |
+| `RESEARCH_MODEL` | *(same as `LLM_MODEL`)* | Model for research agents |
+| `COMPILER_MODEL` | *(same as `LLM_MODEL`)* | Model for the compiler agent |
+| `WRITER_MODEL` | *(same as `LLM_MODEL`)* | Model for the writer agent |
+| `EDITOR_MODEL` | *(same as `LLM_MODEL`)* | Model for the editor agent |
+| `PROFILE_MODEL` | *(same as `LLM_MODEL`)* | Model for the profile agent |
+
+All settings are persisted in the SQLite database and can be edited live through the **Settings** tab in the UI.
+
+### Settings Panel
+
+The Settings tab (`#settings`) provides a UI for all configuration:
+
+- **LLM** — Base URL, API key, global model, per-agent model dropdowns, "Test LLM" button
+- **Search** — Provider selector, Tavily/SerpAPI keys, Hermes path
+- **Push** — VAPID public/private keys, claim email
+- **App** — All pipeline limits (num histories, agents, timeouts, research caps)
 
 ## Profiles
 
@@ -97,6 +128,9 @@ Profiles learn from feedback over time via the feedback records stored in SQLite
 | POST | `/api/pipeline/run` | Run the full generation pipeline |
 | GET | `/api/pipeline/status/{id}` | Get pipeline progress |
 | POST | `/api/notifications/subscribe` | Subscribe to push notifications |
+| GET | `/api/config` | Get all configuration (API keys masked) |
+| PUT | `/api/config` | Update configuration (partial) |
+| POST | `/api/config/test-llm` | Test LLM connection |
 
 ## Tech Stack
 
@@ -115,6 +149,7 @@ historiador/
 │   ├── models/          # SQLAlchemy ORM models
 │   ├── schemas/         # Pydantic request/response schemas
 │   ├── routers/         # FastAPI route handlers
+│   ├── services/        # Business logic (AppConfigService)
 │   ├── notifications/   # Web Push notifications
 │   ├── migrations/      # DB migration scripts
 │   ├── config.py        # Application settings
@@ -123,7 +158,7 @@ historiador/
 │   └── main.py          # FastAPI application entry point
 ├── frontend/
 │   ├── css/             # Stylesheets
-│   ├── js/              # JavaScript modules (router, components, API client)
+│   ├── js/              # JavaScript modules (router, components, API client, settings)
 │   ├── assets/          # Icons and static assets
 │   ├── index.html       # Main HTML entry point
 │   ├── manifest.json    # PWA manifest
