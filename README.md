@@ -56,6 +56,137 @@ Open http://localhost:8080 in your browser.
 | `make migrate` | Create/seed the database (no server needed) |
 | `make clean`   | Remove caches and `.db` files |
 
+## Authentication (Stytch)
+
+Historiador uses [Stytch](https://stytch.com) for passwordless authentication. Users log in via magic links sent to their email — no passwords to manage.
+
+### Setup
+
+1. **Create a Stytch account** at https://stytch.com → sign up for free
+2. **Get your credentials** from the Stytch Dashboard:
+   - Go to **API Keys** → copy your **Project ID** and **Secret**
+   - Go to **SDK Configuration** → copy your **Public Token**
+3. **Update `.env`**:
+
+```bash
+STYTCH_PROJECT_ID=proj_*
+STYTCH_SECRET=***
+STYTCH_PUBLIC_TOKEN=pub_*
+STYTCH_ENVIRONMENT=test
+```
+
+4. **Configure email** in Stytch Dashboard → **Email** → **SMTP Settings** → set up your sender domain (or use Stytch's test domain for development)
+5. **Restart** the server: `make start`
+
+After setup, the frontend will show a login page with a Stytch magic link form. Users enter their email, receive a magic link, and are authenticated automatically.
+
+### API Tokens (Programmatic Access)
+
+For scripts, automation, or MCP clients, generate long-lived API tokens:
+
+1. From the UI: navigate to **Settings** → **API Tokens**
+2. Or via the API: `POST /api/auth/tokens` with `{"label": "my-token"}`
+3. Use the returned token with `x-api-key: ht_...` header
+
+API tokens never expire unless revoked. They have the same permissions as the user who created them.
+
+## Model Context Protocol (MCP)
+
+Historiador includes a built-in MCP server that exposes all UI operations as tools. Connect any MCP-compatible client (like Hermes Agent) to programmatically generate histories, manage topics, and configure the system.
+
+### MCP Server
+
+The MCP server runs on port **8081** (configurable via `MCP_PORT` in `.env`) and is enabled by default (`MCP_ENABLED=true`).
+
+**Two transport modes:**
+
+| Mode | Usage | Auth |
+|------|-------|------|
+| **SSE** (default) | `python3 backend/mcp_server.py --sse` | Requires `Authorization: Bearer ***` or `x-api-key: ht_...` |
+| **stdio** | `python3 backend/mcp_server.py` | No auth (localhost only) |
+
+### Available MCP Tools
+
+| Tool | Description |
+|------|-------------|
+| `create_topic(title)` | Create a new history topic |
+| `list_topics()` | List all topics |
+| `get_topic(topic_id)` | Get topic with subtopics |
+| `send_scoping_message(topic_id, message)` | Send a scoping message (type "done" to end) |
+| `get_scoping_messages(topic_id)` | Get scoping conversation history |
+| `update_subtopic(topic_id, subtopic_id, status)` | Update subtopic status |
+| `run_pipeline(topic_id, num_histories?, num_research_agents?)` | Run the full generation pipeline |
+| `get_pipeline_status(topic_id)` | Get pipeline progress |
+| `list_histories(topic_id?, status?)` | List histories with optional filters |
+| `get_history(history_id)` | Get full history content |
+| `submit_feedback(history_id, feedback_type, feedback_text?)` | Submit accept/reject/refine feedback |
+| `list_profiles()` | List writing profiles |
+| `create_profile(name, tone?, audience?, length?, style_notes?)` | Create a writing profile |
+| `update_profile(profile_id, ...)` | Update a writing profile |
+| `get_config()` | Get application configuration (masked) |
+| `update_config(**kwargs)` | Update application configuration |
+| `test_llm(base_url, api_key, model)` | Test LLM connection |
+| `create_api_token_tool(label)` | Generate a new API token |
+| `list_api_tokens_tool()` | List API tokens |
+| `revoke_api_token_tool(token_id)` | Revoke an API token |
+| `get_agent_config(agent_type)` | Get LLM config for a specific agent |
+| `health()` | Check server health |
+
+### Connecting Hermes to Historiador MCP
+
+To connect your Hermes Agent to Historiador's MCP server:
+
+1. **Start the MCP server**: `python3 backend/mcp_server.py --sse`
+2. **Get an API token** from the Historiador UI (Settings → API Tokens) or via `POST /api/auth/tokens`
+3. **Configure Hermes** with the MCP connection:
+
+```yaml
+# In your MCP client config:
+servers:
+  historiador:
+    transport: sse
+    url: http://localhost:8081
+    headers:
+      Authorization: "Bearer <your-session-token>"
+      # OR use an API token:
+      # x-api-key: "ht_<your-token>"
+```
+
+### Example: Generate a History via MCP
+
+Once connected, you can use tools like:
+
+```python
+# Create a topic
+create_topic(title="The Fall of the Roman Empire")
+
+# Start scoping
+send_scoping_message(topic_id=1, message="I want to focus on the economic causes")
+
+# Run the pipeline
+run_pipeline(topic_id=1, num_histories=2)
+
+# Get results
+list_histories(topic_id=1)
+get_history(history_id=1)
+```
+
+### Connecting to Other MCP Clients
+
+Any MCP-compatible client can connect to Historiador. For **stdio mode** (no auth), use:
+
+```bash
+python3 backend/mcp_server.py
+```
+
+For **SSE mode** (remote access), use:
+
+```bash
+python3 backend/mcp_server.py --sse --port=8081
+```
+
+Then authenticate with a Bearer token or API key.
+
 ## Configuration
 
 ### Environment Variables
@@ -81,6 +212,13 @@ Open http://localhost:8080 in your browser.
 | `MAX_CHARS_PER_PAGE` | `10000` | Max characters to extract per page |
 | `RESEARCH_TIMEOUT_SECONDS` | `60` | Per-agent research timeout |
 | `MAX_SCOPING_ROUNDS` | `5` | Max Q&A rounds before scoping completes |
+| `STYTCH_PROJECT_ID` | — | Stytch Project ID (for authentication) |
+| `STYTCH_SECRET` | — | Stytch Secret API key |
+| `STYTCH_PUBLIC_TOKEN` | — | Stytch Public Token (safe for frontend) |
+| `STYTCH_ENVIRONMENT` | `test` | Stytch environment (`test` or `live`) |
+| `MCP_ENABLED` | `true` | Enable the MCP server |
+| `MCP_PORT` | `8081` | MCP server port |
+| `MCP_HOST` | `0.0.0.0` | MCP server host |
 
 ### Per-Agent Model Selection
 
@@ -139,6 +277,13 @@ Profiles learn from feedback over time via the feedback records stored in SQLite
 | GET | `/api/config` | Get all configuration (API keys masked) |
 | PUT | `/api/config` | Update configuration (partial) |
 | POST | `/api/config/test-llm` | Test LLM connection |
+| **Auth** | | |
+| GET | `/api/auth/config` | Get Stytch config (public, no auth) |
+| POST | `/api/auth/login` | Exchange session JWT for user info |
+| GET | `/api/auth/me` | Get current user (Bearer JWT or x-api-key) |
+| POST | `/api/auth/tokens` | Create API token (requires auth) |
+| GET | `/api/auth/tokens` | List API tokens (requires auth) |
+| DELETE | `/api/auth/tokens/{id}` | Revoke API token (requires auth) |
 
 ## Tech Stack
 
@@ -146,6 +291,8 @@ Profiles learn from feedback over time via the feedback records stored in SQLite
 - **Frontend**: Vanilla JS, CSS custom properties, PWA (service worker + manifest)
 - **LLM**: OpenAI-compatible API (any provider)
 - **Search**: DuckDuckGo (free, default), Direct DuckDuckGo scraping, Hermes CLI subagent, Tavily, or SerpAPI
+- **Auth**: Stytch (passwordless magic links + API tokens)
+- **MCP**: Model Context Protocol (stdio + SSE transports)
 
 ## Project Structure
 
@@ -153,6 +300,7 @@ Profiles learn from feedback over time via the feedback records stored in SQLite
 historiador/
 ├── backend/
 │   ├── agents/          # AI agents (scoping, research, compiler, writer, editor, orchestrator)
+│   ├── auth/            # Stytch auth + API token management
 │   ├── crawler/         # Web search and scraping
 │   ├── models/          # SQLAlchemy ORM models
 │   ├── schemas/         # Pydantic request/response schemas
@@ -163,6 +311,7 @@ historiador/
 │   ├── config.py        # Application settings
 │   ├── database.py      # DB engine and session factory
 │   ├── llm_client.py    # OpenAI-compatible LLM client
+│   ├── mcp_server.py    # MCP server (stdio + SSE)
 │   └── main.py          # FastAPI application entry point
 ├── frontend/
 │   ├── css/             # Stylesheets

@@ -18,6 +18,9 @@ dependencies = [
     "pydantic-settings>=2.0.0",
     "ddgs>=6.1.0; python_version<\"3.13\"",
     "duckduckgo-search>=6.1.0; python_version>=\"3.13\"",
+    "stytch>=1.0.0",
+    "mcp>=1.6.0",
+    "pydantic>=2.0.0",
 ]
 
 [project.optional-dependencies]

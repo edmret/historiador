@@ -38,6 +38,13 @@ DEFAULTS = {
     "MAX_CHARS_PER_PAGE": "10000",
     "MAX_RESEARCH_TOKENS": "8000",
     "RESEARCH_TIMEOUT_SECONDS": "60",
+    "STYTCH_PROJECT_ID": "",
+    "STYTCH_SECRET": "",
+    "STYTCH_PUBLIC_TOKEN": "",
+    "STYTCH_ENVIRONMENT": "test",
+    "MCP_ENABLED": "true",
+    "MCP_PORT": "8081",
+    "MCP_HOST": "0.0.0.0",
 }
 
 SEARCH_PROVIDERS = {
@@ -149,6 +156,21 @@ def write_env(config: dict):
     lines.append(f"MAX_CHARS_PER_PAGE={config['MAX_CHARS_PER_PAGE']}")
     lines.append(f"MAX_RESEARCH_TOKENS={config['MAX_RESEARCH_TOKENS']}")
     lines.append(f"RESEARCH_TIMEOUT_SECONDS={config['RESEARCH_TIMEOUT_SECONDS']}")
+    lines.append("")
+
+    # Auth
+    lines.append("# ── Authentication (Stytch) ────────────────────────────")
+    lines.append(f"STYTCH_PROJECT_ID={config['STYTCH_PROJECT_ID']}")
+    lines.append(f"STYTCH_SECRET={config['STYTCH_SECRET']}")
+    lines.append(f"STYTCH_PUBLIC_TOKEN={config['STYTCH_PUBLIC_TOKEN']}")
+    lines.append(f"STYTCH_ENVIRONMENT={config['STYTCH_ENVIRONMENT']}")
+    lines.append("")
+
+    # MCP
+    lines.append("# ── MCP Server ─────────────────────────────────────────")
+    lines.append(f"MCP_ENABLED={config['MCP_ENABLED']}")
+    lines.append(f"MCP_PORT={config['MCP_PORT']}")
+    lines.append(f"MCP_HOST={config['MCP_HOST']}")
     lines.append("")
 
     ENV_FILE.write_text("\n".join(lines) + "\n")
@@ -314,8 +336,32 @@ def wizard_interactive():
         "  Claim email", DEFAULTS["VAPID_CLAIM_EMAIL"]
     )
 
-    # ── 5. App settings ──
-    section("5. App Settings")
+    # ── 5. Authentication ──
+    section("5. Authentication (Stytch — optional)")
+    print("  Passwordless login via magic links. Skip to use dev mode (no auth).\n")
+    if prompt_bool("  Enable Stytch authentication?", default=False):
+        config["STYTCH_PROJECT_ID"] = prompt_input("  Project ID (from Stytch dashboard)")
+        config["STYTCH_SECRET"] = prompt_input("  Secret API key (from Stytch API Keys)")
+        config["STYTCH_PUBLIC_TOKEN"] = prompt_input("  Public Token (from SDK Configuration)")
+        config["STYTCH_ENVIRONMENT"] = prompt_input("  Environment (test/live)", "test")
+        print("  Stytch configured — users will see a login page on first visit.")
+    else:
+        print("  Running in development mode (no authentication required)")
+
+    # ── 6. MCP Server ──
+    section("6. MCP Server")
+    print("  Exposes all UI operations as MCP tools for programmatic access.\n")
+    if prompt_bool("  Enable MCP server?", default=True):
+        config["MCP_ENABLED"] = "true"
+        config["MCP_PORT"] = prompt_input("  Port", "8081")
+        config["MCP_HOST"] = prompt_input("  Host", "0.0.0.0")
+        print(f"  MCP server will run on {config['MCP_HOST']}:{config['MCP_PORT']}")
+    else:
+        config["MCP_ENABLED"] = "false"
+        print("  MCP server disabled (can be enabled later in .env)")
+
+    # ── 7. App settings ──
+    section("7. App Settings")
     config["DEFAULT_NUM_HISTORIES"] = prompt_input(
         "  Histories per topic", DEFAULTS["DEFAULT_NUM_HISTORIES"]
     )
@@ -332,8 +378,8 @@ def wizard_interactive():
         "  Max pages per query", DEFAULTS["MAX_PAGES_PER_QUERY"]
     )
 
-    # ── 6. Summary ──
-    section("6. Summary")
+    # ── 8. Summary ──
+    section("8. Summary")
     print()
     print(f"    Model:        {config['LLM_MODEL']}")
     print(f"    Base URL:     {config['LLM_BASE_URL']}")
@@ -342,13 +388,15 @@ def wizard_interactive():
     print(f"    Search:       {config['SEARCH_PROVIDER']}")
     print(f"    Database:     {config['DATABASE_URL']}")
     print(f"    Push:         {'configured' if config['VAPID_PUBLIC_KEY'] else 'skipped'}")
+    print(f"    Auth:         {'Stytch' if config['STYTCH_PROJECT_ID'] else 'Dev mode (no auth)'}")
+    print(f"    MCP:          {'enabled on :8081' if config['MCP_ENABLED'] == 'true' else 'disabled'}")
     print()
 
     if prompt_bool("  Write .env file?", default=True):
         write_env(config)
 
-    # ── 7. DB init ──
-    section("7. Initialize Database")
+    # ── 9. DB init ──
+    section("9. Initialize Database")
     init_database()
 
     # Done
@@ -360,6 +408,7 @@ def wizard_interactive():
     print("║  Or:      uvicorn backend.main:app --port 8080         ║")
     print("║                                                        ║")
     print("║  Open:    http://localhost:8080                         ║")
+    print("║  MCP:     http://localhost:8081 (SSE)                  ║")
     print("╚══════════════════════════════════════════════════════════╝")
     print()
 

@@ -7,8 +7,19 @@ const API = {
       method,
       headers: { "Content-Type": "application/json" },
     };
+    // Inject auth token if available
+    const token = AUTH.getToken();
+    if (token) {
+      opts.headers["Authorization"] = `Bearer ${token}`;
+    }
     if (body) opts.body = JSON.stringify(body);
     const resp = await fetch(this.BASE + path, opts);
+    if (resp.status === 401) {
+      // Session expired — redirect to login
+      AUTH.logout();
+      window.location.hash = "#/login";
+      throw new Error("Session expired");
+    }
     if (!resp.ok) {
       const err = await resp.text();
       throw new Error(`API ${method} ${path}: ${resp.status} — ${err}`);
@@ -49,4 +60,21 @@ const API = {
   // Notifications
   subscribePush: (sub) => API.request("POST", "/notifications/subscribe", sub),
   unsubscribePush: (sub) => API.request("POST", "/notifications/unsubscribe", sub),
+
+  // Config
+  getConfig: () => API.request("GET", "/config"),
+  updateConfig: (data) => API.request("PUT", "/config", data),
+  testLLM: (data) => API.request("POST", "/config/test-llm", data),
+
+  // Auth
+  login: (sessionToken) => API.request("POST", "/auth/login", { session_token: sessionToken }),
+  getMe: () => {
+    const token = AUTH.getToken();
+    const headers = { "Content-Type": "application/json" };
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+    return fetch("/api/auth/me", { headers }).then((r) => (r.ok ? r.json() : null));
+  },
+  createApiToken: (label) => API.request("POST", "/auth/tokens", { label }),
+  listApiTokens: () => API.request("GET", "/auth/tokens"),
+  revokeApiToken: (id) => API.request("DELETE", `/auth/tokens/${id}`),
 };

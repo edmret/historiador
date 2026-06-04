@@ -23,6 +23,17 @@ class Settings(BaseSettings):
     max_research_tokens: int = 8000
     research_timeout_seconds: int = 60
 
+    # ── Stytch Authentication ──
+    stytch_project_id: str = ""
+    stytch_secret: str = ""
+    stytch_public_token: str = ""
+    stytch_environment: str = "live"  # "test" or "live"
+
+    # ── MCP Server ──
+    mcp_enabled: bool = True
+    mcp_port: int = 8081
+    mcp_host: str = "0.0.0.0"
+
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 
 
