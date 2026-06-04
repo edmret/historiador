@@ -152,7 +152,12 @@ class TavilySearcher(SearchProvider):
             resp.raise_for_status()
             data = resp.json()
             return [
-                {"url": r.get("url"), "title": r.get("title"), "snippet": r.get("content", "")}
+                {
+                    "url": r.get("url"),
+                    "title": r.get("title"),
+                    "snippet": r.get("content", ""),
+                    "content": r.get("content", ""),  # Tavily returns full AI-summarized content
+                }
                 for r in data.get("results", [])
             ]
 

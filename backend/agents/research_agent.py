@@ -66,12 +66,19 @@ class ResearchAgent:
                     continue
                 seen_urls.add(url)
 
-                content = await self.scraper.scrape(url) if url else None
+                # If the provider already returned full AI-summarized content
+                # (e.g. Tavily), use it directly — skip the expensive scrape.
+                full_content = result.get("content", "")
+                if full_content:
+                    content = full_content[:self.max_chars]
+                else:
+                    content = (await self.scraper.scrape(url))[:self.max_chars] if url else None
+
                 sources.append({
                     "agent_name": self.name,
                     "url": url,
                     "title": result.get("title", ""),
-                    "content_snippet": (content[:self.max_chars] if content else result.get("snippet", "")),
+                    "content_snippet": content or result.get("snippet", ""),
                 })
 
                 if len(sources) >= self.max_queries * self.max_pages:
