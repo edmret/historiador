@@ -35,11 +35,13 @@ User → Scoping Agent → Research Agents × N → Compiler → Writer → Edit
 # 1. Install dependencies
 uv sync
 
-# 2. Configure environment
-cp .env.example .env
-# Edit .env with your LLM API key
+# 2. Run the setup wizard (interactive)
+uv run python scripts/setup.py
 
-# 3. Run the server
+# Or use quick mode and edit .env manually:
+# uv run python scripts/setup.py --quick
+
+# 3. Start the server
 bash scripts/run.sh
 # Or directly: uvicorn backend.main:app --reload
 ```
