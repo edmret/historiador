@@ -1,0 +1,46 @@
+/*
+ * Historiador dashboard — root stylesheet.
+ *
+ * Scope of this file is deliberately tiny: pull in Tailwind, tell the page it is
+ * dark, and give the document a non-transparent floor. It defines no palette, no
+ * scale and no component styles.
+ */
+
+@import 'tailwindcss';
+
+/* ─────────────────────────────────────────────────────────────────────────────
+ * SEAM — design tokens
+ *
+ * The design-token workstream owns the token layer and plugs it in HERE, e.g.
+ *
+ *     @import './styles/tokens.css';
+ *
+ * or by adding a `@theme { --color-…: …; --font-…: …; }` block at this point.
+ * Everything below is bootstrap-only and expected to be re-expressed in terms of
+ * those tokens (`background-color: var(--color-surface-base)` etc.) once they
+ * land. Do not grow this file into a design system.
+ * ───────────────────────────────────────────────────────────────────────────*/
+
+@layer base {
+  :root {
+    /* Dark is the designed state, not an inversion (ARCHITECTURE.md §9). This
+     * makes the UA render scrollbars, form controls and focus rings dark. */
+    color-scheme: dark;
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    /* Provisional literals — a transparent body borrows the host's theme, so the
+     * page must paint its own ground. Replace with tokens, do not extend. */
+    background-color: #0a0a0b;
+    color: #e6e6e9;
+
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+}

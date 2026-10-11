@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en" class="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- Dark is the designed state (ARCHITECTURE.md §9), so the UA is told before
+         first paint — this prevents a white flash and makes form controls,
+         scrollbars and focus rings render dark. -->
+    <meta name="color-scheme" content="dark" />
+    <meta name="theme-color" content="#0a0a0b" />
+    <meta
+      name="description"
+      content="Historiador — live, inspectable multi-agent history generation."
+    />
+    <title>Historiador</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

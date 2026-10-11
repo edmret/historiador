@@ -12,3 +12,9 @@ venv/
 dist/
 *.egg-info/
 .DS_Store
+
+# web build/test artifacts
+web/coverage/
+web/dist/
+web/node_modules/
+logs/

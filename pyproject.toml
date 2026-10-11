@@ -1,33 +1,127 @@
 [project]
 name = "historiador"
-version = "0.1.0"
+version = "1.0.0"
+description = "Multi-agent history generator with a live agent-observability dashboard"
 requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.115.0",
     "uvicorn[standard]>=0.32.0",
-    "sqlalchemy>=2.0.0",
+    "websockets>=13.0",
+    "sqlalchemy[asyncio]>=2.0.36",
+    "alembic>=1.14.0",
     "aiosqlite>=0.20.0",
     "httpx>=0.28.0",
-    "aiohttp>=3.10.0",
     "beautifulsoup4>=4.12.0",
     "lxml>=5.3.0",
+    "pydantic>=2.9.0",
+    "pydantic-settings>=2.6.0",
+    "watchfiles>=0.24.0",
+    "typer>=0.15.0",
+    "structlog>=24.4.0",
     "pywebpush>=1.14.0",
     "cryptography>=43.0.0",
     "python-dotenv>=1.0.0",
-    "pydantic>=2.0.0",
-    "pydantic-settings>=2.0.0",
-    "ddgs>=6.1.0; python_version<\"3.13\"",
-    "duckduckgo-search>=6.1.0; python_version>=\"3.13\"",
     "stytch>=1.0.0",
     "mcp>=1.6.0",
-    "pydantic>=2.0.0",
+    "ddgs>=9.0.0",
 ]
 
 [project.optional-dependencies]
+e2e = ["playwright>=1.49.0"]
+
+# A dependency-group rather than an optional-extra: `uv sync` installs groups by
+# default, but silently *uninstalls* an unrequested extra. As an extra, `dev` meant
+# that anyone running a bare `uv sync` lost mypy, ruff, and pytest — and every
+# task's acceptance checks with them.
+[dependency-groups]
 dev = [
-    "pytest>=8.0.0",
+    "pytest>=8.3.0",
     "pytest-asyncio>=0.24.0",
+    "pytest-cov>=6.0.0",
+    "anyio>=4.6.0",
+    "ruff>=0.8.0",
+    "mypy>=1.13.0",
+    "import-linter>=2.1",
+    "respx>=0.21.1",
 ]
-playwright = [
-    "playwright>=1.45.0",
+
+[project.scripts]
+historiador = "historiador.cli:app"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/historiador"]
+
+# ── Lint / format ──────────────────────────────────────────────────────────
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "UP", "B", "A", "C4", "SIM", "TID", "RUF", "ASYNC", "PT"]
+ignore = ["E501"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101"]
+
+# ── Types ──────────────────────────────────────────────────────────────────
+[tool.mypy]
+python_version = "3.12"
+strict = true
+packages = ["historiador"]
+mypy_path = "src"
+warn_unreachable = true
+disallow_any_explicit = false
+
+[[tool.mypy.overrides]]
+module = ["ddgs.*", "pywebpush.*", "stytch.*", "bs4.*"]
+ignore_missing_imports = true
+
+# ── Tests ──────────────────────────────────────────────────────────────────
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+addopts = "-q --strict-markers --strict-config"
+markers = [
+    "integration: touches the database or a local server",
+    "e2e: drives a real browser",
+]
+
+[tool.coverage.run]
+source = ["src/historiador"]
+branch = true
+
+[tool.coverage.report]
+exclude_lines = ["pragma: no cover", "if TYPE_CHECKING:", "raise NotImplementedError"]
+
+# ── Layering enforcement ───────────────────────────────────────────────────
+[tool.importlinter]
+root_package = "historiador"
+
+[[tool.importlinter.contracts]]
+name = "core is product-agnostic"
+type = "forbidden"
+source_modules = ["historiador.core"]
+forbidden_modules = [
+    "historiador.domain",
+    "historiador.data",
+    "historiador.api",
+    "historiador.services",
+    "historiador.mcp",
+    "historiador.daemon",
+]
+
+[[tool.importlinter.contracts]]
+name = "layered architecture"
+type = "layers"
+layers = [
+    "historiador.daemon",
+    "historiador.api | historiador.mcp",
+    "historiador.services",
+    "historiador.domain",
+    "historiador.core",
 ]
